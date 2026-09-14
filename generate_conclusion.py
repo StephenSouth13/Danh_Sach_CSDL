@@ -9,10 +9,10 @@ file_path = r'D:\KLG\Danh_Sach_CSDL\DỮ LIỆU THÀNH TỰU GAB đối chiếu 
 print("Đang đọc dữ liệu từ Excel...")
 xl = pd.ExcelFile(file_path)
 df0 = pd.read_excel(xl, sheet_name=xl.sheet_names[0])  # Dữ liệu gốc (GAB)
-df1 = pd.read_excel(xl, sheet_name=xl.sheet_names[1])  # Dữ liệu đã chuẩn hóa (Trang tính 1)
+df2 = pd.read_excel(xl, sheet_name='Trang tính 2')  # Dữ liệu cào nguồn ngoài
 
-# Lấy 50 người đầu tiên từ df1 để làm báo cáo đối chiếu
-df_sample = df1.head(50).copy()
+# Lấy toàn bộ người từ Trang tính 2 để làm báo cáo đối chiếu
+df_sample = df2.copy()
 
 conclusions = []
 for idx, row in df_sample.iterrows():
