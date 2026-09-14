@@ -40,8 +40,7 @@ for i, name in enumerate(names_to_search):
     found_any = False
     try:
         # Lấy 2 kết quả đầu tiên
-        # googlesearch-python returns a generator of urls or dicts if advanced=True
-        search_res = search(query, num=2, stop=2, pause=5, advanced=True)
+        search_res = search(query, num_results=2, sleep_interval=2, advanced=True)
         for res in search_res:
             title = res.title
             desc = res.description
