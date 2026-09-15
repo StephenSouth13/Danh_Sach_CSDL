@@ -55,6 +55,16 @@ function colIndex(ref) {
   return n;
 }
 
+function colLetters(n) {
+  let s = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
 function sheetMap(dir) {
   const wb = read(path.join(dir, "xl", "workbook.xml"));
   const rels = read(path.join(dir, "xl", "_rels", "workbook.xml.rels"));
@@ -352,6 +362,14 @@ function setCell(rowXml, cellRef, text) {
   return rowXml.replace("</row>", `${cell}</row>`);
 }
 
+function rowXmlFromValues(rowNumber, values) {
+  let rowXml = `<row r="${rowNumber}"></row>`;
+  values.forEach((value, idx) => {
+    rowXml = setCell(rowXml, `${colLetters(idx + 1)}${rowNumber}`, value ?? "");
+  });
+  return rowXml;
+}
+
 function styleHeader(rowXml, cellRef, styleFromRef, label) {
   const re = new RegExp(`<c\\b([^>]*)\\br="${cellRef}"([^>]*)(?:\\/>|>[\\s\\S]*?<\\/c>)`);
   const style = styleFromRef ? ` s="${styleFromRef}"` : "";
@@ -384,7 +402,7 @@ const targetSheets = sheetMap(targetDir);
 const targetShared = sharedStrings(targetDir);
 const dataSheet = [...targetSheets.values()].find((s) => s.name.startsWith("Data_record_01-01-2022_01-01-20"));
 if (!dataSheet) throw new Error("Không thấy tab Data_record_01-01-2022_01-01-20 trong file Data.");
-const prioritySheet = [...targetSheets.values()].find((s) => s.name.startsWith("Trang tính1"));
+const prioritySheet = targetSheets.get("Danh sách Hội Ngộ KLG") || [...targetSheets.values()].find((s) => s.name.startsWith("Trang tính1"));
 const priorityNames = new Set();
 const priorityGabIds = new Set();
 if (prioritySheet) {
@@ -549,6 +567,7 @@ function missingNote(rowNo, item) {
 const appendedRowXml = [];
 for (const item of missingAddRows) {
   const rowNo = appendRow++;
+  item.appendRow = rowNo;
   const gabId = item.group.records[0].gabId || "";
   let rowXml = `<row r="${rowNo}"></row>`;
   rowXml = setCell(rowXml, `A${rowNo}`, "");
@@ -570,6 +589,75 @@ xml = clearOldHiMerges(xml);
 xml = addMerges(xml, mergeRefs);
 xml = xml.replace(/<dimension\b[^>]*ref="[^"]*"[^/]*\/>/, (m) => m.replace(/ref="[^"]*"/, `ref="A1:L${appendRow - 1}"`));
 write(sheetPath, xml);
+
+if (prioritySheet) {
+  const wbPath = path.join(targetDir, "xl", "workbook.xml");
+  let wbXml = read(wbPath);
+  wbXml = wbXml.replace(/<sheet\b([^>]*?)name="Trang tính1"([^>]*)>/, `<sheet$1name="Danh sách Hội Ngộ KLG"$2>`);
+  write(wbPath, wbXml);
+
+  const priorityHeaders = [
+    "Dòng trong Data",
+    "recordId",
+    "gabId",
+    "KỶ LỤC GIA",
+    "NGÀY XÁC LẬP",
+    "TÊN KỶ LỤC",
+    "url",
+    "description / nguồn",
+    "Check",
+    "Note",
+    "Tỉnh",
+    "LĨNH VỰC XÁC LẬP",
+    "Ưu tiên",
+  ];
+  const priorityRows = [];
+  for (const rec of records.filter(isPriorityRecord)) {
+    priorityRows.push({
+      order: statusByRow.get(rec.row) === "GAB thiếu thành tựu" ? 0 : 1,
+      values: [
+        rec.row,
+        rec.recordId,
+        rec.gabId,
+        rec.name,
+        rec.date,
+        rec.title,
+        rec.url,
+        rec.description,
+        statusByRow.get(rec.row) || "",
+        noteByGroupStart.get(rec.row) || "",
+        provinceByRow.get(rec.row) || "",
+        fieldByRow.get(rec.row) || "",
+        "Ưu tiên hội ngộ",
+      ],
+    });
+  }
+  for (const item of missingAddRows.filter((item) => item.group?.records?.some(isPriorityRecord) || isPriorityName(item.ref.owner))) {
+    priorityRows.push({
+      order: 0,
+      values: [
+        item.appendRow,
+        "",
+        item.group.records[0].gabId || "",
+        item.ref.owner,
+        item.ref.date,
+        item.ref.title,
+        "",
+        `Bổ sung từ ${item.ref.sheet} dòng ${item.ref.row}.`,
+        "GAB thiếu thành tựu",
+        missingNote(item.appendRow, item),
+        item.ref.province,
+        item.ref.field,
+        "Ưu tiên hội ngộ",
+      ],
+    });
+  }
+  priorityRows.sort((a, b) => a.order - b.order || Number(a.values[0]) - Number(b.values[0]));
+  const allPriorityRows = [priorityHeaders, ...priorityRows.map((r) => r.values)];
+  const sheetDataPriority = allPriorityRows.map((values, idx) => rowXmlFromValues(idx + 1, values)).join("");
+  const prXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:M${allPriorityRows.length}"/><cols><col min="1" max="1" width="14" customWidth="1"/><col min="2" max="3" width="34" customWidth="1"/><col min="4" max="4" width="28" customWidth="1"/><col min="5" max="5" width="16" customWidth="1"/><col min="6" max="6" width="62" customWidth="1"/><col min="7" max="8" width="42" customWidth="1"/><col min="9" max="10" width="38" customWidth="1"/><col min="11" max="13" width="24" customWidth="1"/></cols><sheetData>${sheetDataPriority}</sheetData><autoFilter ref="A1:M${allPriorityRows.length}"/></worksheet>`;
+  write(path.join(targetDir, prioritySheet.target), prXml);
+}
 
 const zipOut = path.join(outDir, "out.zip");
 if (fs.existsSync(outputXlsx)) fs.rmSync(outputXlsx, { force: true });
