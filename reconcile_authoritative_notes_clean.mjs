@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 const root = process.cwd();
 const sourceXlsx = path.join(root, "Dulieutruyxuat", "Bản sao của DỮ LIỆU THÀNH TỰU GAB - 15_24, 13 tháng 9.xlsx");
 const refXlsx = path.join(root, "Dulieutruyxuat", "MÔ TẢ YÊU CẦU NHẬP THÔNG TIN GAB.xlsx");
+const refWorkbookLabel = "Dulieutruyxuat/MÔ TẢ YÊU CẦU NHẬP THÔNG TIN GAB.xlsx";
 const outDir = path.join(root, "outputs", "csdl_authoritative_clean_work");
 const srcDir = path.join(outDir, "src");
 const refDir = path.join(outDir, "ref");
@@ -151,8 +152,19 @@ function short(s = "", max = 130) {
   const t = String(s ?? "").replace(/\s+/g, " ").trim();
   return t.length > max ? `${t.slice(0, max - 3)}...` : t;
 }
+function colRef(row, col) {
+  return `${colLetters(col)}${row}`;
+}
+function sourceCell(ref, key) {
+  const meta = ref.cols?.[key];
+  if (!meta) return "";
+  return `${ref.sheet}!${colRef(ref.row, meta.col)} (${meta.label})="${short(meta.value, 160)}"`;
+}
+function refSource(ref) {
+  return `file chuẩn "${refWorkbookLabel}", tab "${ref.sheet}", dòng ${ref.row}: ${sourceCell(ref, "owner")}; ${sourceCell(ref, "title")}; ${sourceCell(ref, "date")}`;
+}
 function refMeta(ref) {
-  return `${ref.sheet}!${ref.row}: ${short(ref.title, 100)} (${excelDateText(ref.date) || "chưa rõ ngày"})`;
+  return `${ref.sheet}!${ref.row}: ${short(ref.title, 100)} (${excelDateText(ref.date) || "chưa rõ ngày"}). Nguồn: ${refSource(ref)}`;
 }
 function setCell(xml, rowNumber, col, value) {
   const ref = `${colLetters(col)}${rowNumber}`;
@@ -177,21 +189,54 @@ function updateDimension(xml, ref) {
   return xml.replace(/<dimension\b[^>]*\/>/, `<dimension ref="${ref}"/>`);
 }
 function refCols(sheetName, r) {
-  if (sheetName === "CSDL KLVN") return { owner: r.values.get(6), title: r.values.get(5), date: r.values.get(4), province: r.values.get(7), field: r.values.get(8) };
-  if (sheetName === "CSDL KLVW") return { owner: r.values.get(7), title: r.values.get(6), date: r.values.get(5), province: r.values.get(9) || r.values.get(8), field: r.values.get(10) || "" };
-  return { owner: r.values.get(2), title: r.values.get(3), date: r.values.get(5) || r.values.get(4), province: r.values.get(7), field: "" };
+  if (sheetName === "CSDL KLVN") return {
+    owner: r.values.get(6), title: r.values.get(5), date: r.values.get(4), province: r.values.get(7), field: r.values.get(8),
+    cols: {
+      owner: { col: 6, label: "KỶ LỤC GIA", value: r.values.get(6) ?? "" },
+      title: { col: 5, label: "TÊN KỶ LỤC", value: r.values.get(5) ?? "" },
+      date: { col: 4, label: "NGÀY XÁC LẬP", value: excelDateText(r.values.get(4) ?? "") },
+      province: { col: 7, label: "Tỉnh", value: r.values.get(7) ?? "" },
+      field: { col: 8, label: "LĨNH VỰC XÁC LẬP", value: r.values.get(8) ?? "" },
+    }
+  };
+  if (sheetName === "CSDL KLVW") return {
+    owner: r.values.get(7), title: r.values.get(6), date: r.values.get(5), province: r.values.get(9) || r.values.get(8), field: r.values.get(10) || "",
+    cols: {
+      owner: { col: 7, label: "Cá nhân/ Đơn vị sở hữu Kỷ lục", value: r.values.get(7) ?? "" },
+      title: { col: 6, label: "Tên Kỷ lục", value: r.values.get(6) ?? "" },
+      date: { col: 5, label: "NGÀY CẤP", value: excelDateText(r.values.get(5) ?? "") },
+      province: { col: 9, label: "Tỉnh", value: r.values.get(9) ?? "" },
+      field: { col: 10, label: "Quốc gia", value: r.values.get(10) ?? "" },
+    }
+  };
+  const dateCol = String(r.values.get(5) ?? "").trim() ? 5 : 4;
+  return {
+    owner: r.values.get(2), title: r.values.get(3), date: r.values.get(dateCol), province: r.values.get(7), field: "",
+    cols: {
+      owner: { col: 2, label: "TÊN CÁ NHÂN/ĐƠN VỊ", value: r.values.get(2) ?? "" },
+      title: { col: 3, label: "TÊN KỶ LỤC", value: r.values.get(3) ?? "" },
+      date: { col: dateCol, label: dateCol === 5 ? "THỜI ĐIỂM XÁC LẬP" : "NĂM XÁC LẬP", value: excelDateText(r.values.get(dateCol) ?? "") },
+      province: { col: 7, label: "TỈNH/THÀNH", value: r.values.get(7) ?? "" },
+    }
+  };
 }
 function splitOwnerTitle(raw) {
   let owner = String(raw.owner ?? "").trim();
   let title = String(raw.title ?? "").trim();
+  let cols = raw.cols;
   if (!owner && title.includes("\n")) {
     const lines = title.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
     if (lines.length >= 2) {
       owner = lines[0];
       title = lines.slice(1).join(" ");
+      cols = {
+        ...raw.cols,
+        owner: { ...raw.cols?.title, value: owner, label: `${raw.cols?.title?.label || "TÊN KỶ LỤC"} - dòng 1 tách làm KLG` },
+        title: { ...raw.cols?.title, value: title, label: `${raw.cols?.title?.label || "TÊN KỶ LỤC"} - phần sau khi tách KLG` },
+      };
     }
   }
-  return { ...raw, owner, title };
+  return { ...raw, owner, title, cols };
 }
 function dataDuplicateKey(row) {
   return [row.recordId, row.gabId, normalize(row.fullName), dateKey(row.time), normalize(row.title), normalize(row.url)].join("|");
@@ -200,7 +245,7 @@ function detailAction(prefix, x) {
   const row = x.row;
   const ref = x.result?.matchedRef;
   if (ref) {
-    return `${prefix} Data dòng ${row.rowNumber}: "${short(row.title, 120)}"; ngày GAB/Data="${excelDateText(row.time) || "trống"}"; ngày chuẩn CSDL="${excelDateText(ref.date) || "trống"}"; nguồn chuẩn ${ref.sheet}!${ref.row}. Cần sửa trên GAB theo ngày/thông tin chuẩn này.`;
+    return `${prefix} Data dòng ${row.rowNumber}: "${short(row.title, 120)}"; Data cột D (time)="${excelDateText(row.time) || "trống"}"; ngày chuẩn CSDL="${excelDateText(ref.date) || "trống"}". Nguồn chuẩn: ${refSource(ref)}. Cần sửa trên GAB theo ngày/thông tin chuẩn này.`;
   }
   return `${prefix} Data dòng ${row.rowNumber}: "${short(row.title, 120)}"; ngày GAB/Data="${excelDateText(row.time) || "trống"}". Chưa có thành tựu tương ứng trong CSDL chuẩn; cần xác minh đây là dữ liệu dư/ngoài CSDL hay phải chuẩn hóa tên kỷ lục.`;
 }
@@ -236,6 +281,7 @@ for (const name of ["CSDL KLVN", "CSDL KLVW", "CSDL KL CA", "CSDL KLTG"]) {
       date: String(raw.date ?? "").trim(),
       province: String(raw.province ?? "").trim(),
       field: String(raw.field ?? "").trim(),
+      cols: raw.cols,
       ownerKey: normalize(owner),
       ownerTokens: tokens(owner, true),
       titleTokens: tokens(title),
@@ -307,13 +353,13 @@ for (const row of dataRows) {
     const dateOk = dataDate && refDate && (dataDate === refDate || dataDate.includes(refDate) || refDate.includes(dataDate));
     if (!hasDateLike(matchedRef.date)) {
       check = "SAI/CẦN RÀ: CSDL chưa có ngày chuẩn rõ";
-      note = `Tên kỷ lục khớp CSDL nhưng ô thời gian trong CSDL chuẩn chưa phải ngày rõ ràng: "${excelDateText(matchedRef.date) || "trống"}". Data/GAB đang ghi "${excelDateText(row.time) || "trống"}". Cần hỏi/xác nhận ngày xác lập chuẩn tại ${refMeta(matchedRef)} trước khi sửa GAB.`;
+      note = `Tên kỷ lục khớp CSDL nhưng ô thời gian trong CSDL chuẩn chưa phải ngày rõ ràng: "${excelDateText(matchedRef.date) || "trống"}". Data/GAB đang ghi tại Data dòng ${row.rowNumber}, cột D (time)="${excelDateText(row.time) || "trống"}"; cột E (title)="${short(row.title, 180)}". Nguồn chuẩn cần kiểm tra: ${refSource(matchedRef)}. Cần hỏi/xác nhận ngày xác lập chuẩn trước khi sửa GAB.`;
     } else if (dateOk) {
       check = "ĐÚNG: Khớp CSDL chuẩn";
-      note = `Khớp theo kỷ lục gia, tên kỷ lục và thời gian xác lập với ${refMeta(matchedRef)}. Không cần xử lý thành tựu này.`;
+      note = `Khớp theo kỷ lục gia, tên kỷ lục và thời gian xác lập. Data dòng ${row.rowNumber}: cột C (fullName)="${row.fullName}", cột D (time)="${excelDateText(row.time) || "trống"}", cột E (title)="${short(row.title, 180)}". Nguồn chuẩn: ${refSource(matchedRef)}. Không cần xử lý thành tựu này.`;
     } else {
       check = "SAI: Sai thời gian xác lập";
-      note = `Tên kỷ lục khớp CSDL nhưng ngày trên GAB/Data là "${excelDateText(row.time) || "trống"}", ngày chuẩn CSDL là "${excelDateText(matchedRef.date) || "trống"}". Cần sửa thời gian xác lập trên GAB theo ${refMeta(matchedRef)}.`;
+      note = `Sai thời gian xác lập. Data/GAB đang ghi tại Data dòng ${row.rowNumber}, cột D (time)="${excelDateText(row.time) || "trống"}"; cột E (title)="${short(row.title, 180)}". Ngày đúng theo CSDL chuẩn là "${excelDateText(matchedRef.date) || "trống"}". Nguồn chuẩn: ${refSource(matchedRef)}. Cách xử lý: sửa trường thời gian xác lập trên GAB từ "${excelDateText(row.time) || "trống"}" thành "${excelDateText(matchedRef.date) || "trống"}"; nếu GAB đang dùng ngày 01/01 chỉ để đại diện cho năm thì cần xác nhận lại quy tắc nhập ngày trước khi sửa hàng loạt.`;
     }
   }
   if (duplicateRows.has(row.rowNumber)) {

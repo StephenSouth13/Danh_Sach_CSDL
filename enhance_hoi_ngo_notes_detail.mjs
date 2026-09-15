@@ -93,6 +93,11 @@ function setCell(xml, rowNumber, col, value) {
     return match;
   });
   if (!replaced) body += cellXml;
+  body = [...body.matchAll(/<c\b[^>]*\br="([^"]+)"[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)]
+    .map((m) => ({ ref: m[1], xml: m[0] }))
+    .sort((a, b) => colIndex(a.ref) - colIndex(b.ref))
+    .map((c) => c.xml)
+    .join("");
   return xml.replace(rowRe, `<row${rowMatch[1]}r="${rowNumber}"${rowMatch[2]}>${body}</row>`);
 }
 
@@ -123,7 +128,7 @@ function rowsForName(name) {
 }
 function line(row, prefix) {
   const fix = row.note.replace(/\s+/g, " ").trim();
-  return `${prefix} Data dòng ${row.rowNumber}: "${short(row.title, 120)}"; ngày trong GAB/Data="${row.date || "trống"}"; kết luận="${row.check}". Cần xử lý: ${short(fix, 260)}`;
+  return `${prefix} Data dòng ${row.rowNumber}: "${short(row.title, 140)}"; ngày trong GAB/Data="${row.date || "trống"}"; kết luận="${row.check}". Chi tiết lỗi/cách sửa/nguồn chuẩn: ${short(fix, 760)}`;
 }
 
 let hoiXml = read(path.join(workDir, "xl", "worksheets", "sheet2.xml"));
@@ -145,12 +150,12 @@ for (const r of hoiRows) {
   const ok = items.filter((x) => normalize(x.check).startsWith("dung"));
   const check = wrong.length || extra.length || dupes.length || missingNotes.length ? "SAI/CẦN XỬ LÝ" : "ĐÚNG/CHƯA THẤY LỖI THÀNH TỰU";
   const note = [
-    `Đối chiếu "${name}": Data/GAB có ${items.length} dòng liên quan. CSDL chuẩn là căn cứ; nếu GAB/Data khác CSDL thì cần sửa trên GAB hoặc xác minh dữ liệu ngoài CSDL.`,
+    `Đối chiếu "${name}": Data/GAB có ${items.length} dòng liên quan. CSDL chuẩn là căn cứ; nếu GAB/Data khác CSDL thì cần sửa trên GAB hoặc xác minh dữ liệu ngoài CSDL. Khi có lỗi, ghi rõ Data dòng/cột cần sửa và nguồn chuẩn tại file MÔ TẢ YÊU CẦU NHẬP THÔNG TIN GAB.xlsx, tab/dòng/cột tương ứng.`,
     ok.length ? `ĐÃ KHỚP: ${ok.length} dòng đã khớp CSDL chuẩn, không cần sửa thành tựu ở các dòng này.` : "ĐÃ KHỚP: Chưa có dòng nào khớp hoàn toàn.",
     wrong.length ? `SAI THỜI GIAN: ${wrong.length} dòng. ${wrong.slice(0, 10).map((x, i) => line(x, `${i + 1}.`)).join(" ")}` : "SAI THỜI GIAN: Chưa ghi nhận.",
     extra.length ? `DƯ/CHƯA KHỚP CSDL: ${extra.length} dòng. ${extra.slice(0, 10).map((x, i) => line(x, `${i + 1}.`)).join(" ")}` : "DƯ/CHƯA KHỚP CSDL: Chưa ghi nhận.",
     missingNotes.length ? `THIẾU SO VỚI CSDL: ${missingNotes.slice(0, 6).join(" ")}` : "THIẾU SO VỚI CSDL: Chưa ghi nhận.",
-    dupes.length ? `TRÙNG DÒNG: ${dupes.length} dòng trùng kỹ thuật, không tính là thành tựu khác nhau. ${dupes.slice(0, 10).map((x) => `Data dòng ${x.rowNumber}: ${short(x.note, 180)}`).join(" ")}` : "TRÙNG DÒNG: Chưa ghi nhận."
+    dupes.length ? `TRÙNG DÒNG: ${dupes.length} dòng trùng kỹ thuật, không tính là thành tựu khác nhau. ${dupes.slice(0, 10).map((x) => `Data dòng ${x.rowNumber}: ${short(x.note, 360)}`).join(" ")}` : "TRÙNG DÒNG: Chưa ghi nhận."
   ].join("\n");
   hoiXml = setCell(hoiXml, r.rowNumber, 25, check);
   hoiXml = setCell(hoiXml, r.rowNumber, 26, note);
@@ -159,6 +164,13 @@ for (const r of hoiRows) {
 write(path.join(workDir, "xl", "worksheets", "sheet2.xml"), hoiXml.replace(/<\/c>>+/g, "</c>"));
 const outZip = path.join(workDir, "out.zip");
 if (fs.existsSync(outZip)) fs.rmSync(outZip, { force: true });
-ps(`Compress-Archive -Path '${path.join(workDir, "*").replace(/'/g, "''")}' -DestinationPath '${outZip.replace(/'/g, "''")}' -Force`);
+fs.rmSync(path.join(workDir, "book.zip"), { force: true });
+const packageItems = [
+  path.join(workDir, "[Content_Types].xml"),
+  path.join(workDir, "_rels"),
+  path.join(workDir, "docProps"),
+  path.join(workDir, "xl"),
+].map((p) => `'${p.replace(/'/g, "''")}'`).join(",");
+ps(`Compress-Archive -LiteralPath ${packageItems} -DestinationPath '${outZip.replace(/'/g, "''")}' -Force`);
 fs.copyFileSync(outZip, workbook);
 console.log(JSON.stringify({ workbook, hoiRows: hoiRows.length, written }, null, 2));
