@@ -4,9 +4,11 @@ import { execFileSync } from "node:child_process";
 
 const targetXlsx = "D:\\KLG\\Danh_Sach_CSDL\\Dulieutruyxuat\\Bản sao của DỮ LIỆU THÀNH TỰU GAB - 15_24, 13 tháng 9.xlsx";
 const refXlsx = "D:\\KLG\\Danh_Sach_CSDL\\Dulieutruyxuat\\MÔ TẢ YÊU CẦU NHẬP THÔNG TIN GAB.xlsx";
+const prioritySourceXlsx = "D:\\KLG\\Danh_Sach_CSDL\\DỮ LIỆU THÀNH TỰU GAB đối chiếu CSDL ĐÃ CHUẨN HÓA (1).xlsx";
 const outDir = path.resolve("outputs", "reconcile_grouped_check_notes_work");
 const targetDir = path.join(outDir, "target");
 const refDir = path.join(outDir, "ref");
+const priorityDir = path.join(outDir, "priority_source");
 const outputXlsx = path.resolve("outputs", "reconciled_gab_records_customer_feedback.xlsx");
 
 function ps(command) {
@@ -21,18 +23,24 @@ function resetDir(dir) {
 resetDir(outDir);
 fs.mkdirSync(targetDir, { recursive: true });
 fs.mkdirSync(refDir, { recursive: true });
+fs.mkdirSync(priorityDir, { recursive: true });
 const targetZip = path.join(outDir, "target.zip");
 const refZip = path.join(outDir, "ref.zip");
+const priorityZip = path.join(outDir, "priority_source.zip");
 fs.copyFileSync(targetXlsx, targetZip);
 fs.copyFileSync(refXlsx, refZip);
+if (fs.existsSync(prioritySourceXlsx)) fs.copyFileSync(prioritySourceXlsx, priorityZip);
 ps(`Expand-Archive -LiteralPath '${targetZip.replace(/'/g, "''")}' -DestinationPath '${targetDir.replace(/'/g, "''")}' -Force`);
 ps(`Expand-Archive -LiteralPath '${refZip.replace(/'/g, "''")}' -DestinationPath '${refDir.replace(/'/g, "''")}' -Force`);
+if (fs.existsSync(priorityZip)) ps(`Expand-Archive -LiteralPath '${priorityZip.replace(/'/g, "''")}' -DestinationPath '${priorityDir.replace(/'/g, "''")}' -Force`);
 
 const read = (p) => fs.readFileSync(p, "utf8");
 const write = (p, s) => fs.writeFileSync(p, s, "utf8");
 
 function decodeXml(s = "") {
   return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
@@ -69,13 +77,17 @@ function sheetMap(dir) {
   const wb = read(path.join(dir, "xl", "workbook.xml"));
   const rels = read(path.join(dir, "xl", "_rels", "workbook.xml.rels"));
   const relMap = new Map();
-  for (const m of rels.matchAll(/<Relationship\b[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) {
-    relMap.set(m[1], m[2]);
+  for (const m of rels.matchAll(/<Relationship\b([^>]*)\/>/g)) {
+    const attrs = m[1];
+    const id = attrs.match(/\bId="([^"]+)"/)?.[1];
+    const target = attrs.match(/\bTarget="([^"]+)"/)?.[1];
+    if (id && target) relMap.set(id, target);
   }
   const map = new Map();
   for (const m of wb.matchAll(/<sheet\b[^>]*name="([^"]+)"[^>]*sheetId="([^"]+)"[^>]*(?:r:id|id)="([^"]+)"/g)) {
     let target = relMap.get(m[3]);
     if (!target) continue;
+    if (target.startsWith("/")) target = target.slice(1);
     if (!target.startsWith("xl/")) target = `xl/${target}`;
     map.set(decodeXml(m[1]), { name: decodeXml(m[1]), id: m[2], target });
   }
@@ -405,6 +417,7 @@ if (!dataSheet) throw new Error("Không thấy tab Data_record_01-01-2022_01-01-
 const prioritySheet = targetSheets.get("Danh sách Hội Ngộ KLG") || [...targetSheets.values()].find((s) => s.name.startsWith("Trang tính1"));
 const priorityNames = new Set();
 const priorityGabIds = new Set();
+let prioritySourceLabel = "Trang tính1 trong file GAB gốc";
 if (prioritySheet) {
   for (const r of rowsFromSheet(targetDir, prioritySheet, targetShared)) {
     if (r.rowNumber <= 1) continue;
@@ -412,6 +425,23 @@ if (prioritySheet) {
     const name = String(r.values.get(3) ?? "").trim();
     if (gabId) priorityGabIds.add(gabId);
     if (normalize(name)) priorityNames.add(normalize(name));
+  }
+}
+if (fs.existsSync(path.join(priorityDir, "xl", "workbook.xml"))) {
+  const prioritySourceSheets = sheetMap(priorityDir);
+  const prioritySourceShared = sharedStrings(priorityDir);
+  const klgSheet = [...prioritySourceSheets.values()].find((s) => s.id === "4") || [...prioritySourceSheets.values()].find((s) => normalize(s.name).includes("klg"));
+  if (klgSheet) {
+    priorityNames.clear();
+    priorityGabIds.clear();
+    prioritySourceLabel = `${klgSheet.name} trong file DỮ LIỆU THÀNH TỰU GAB đối chiếu CSDL ĐÃ CHUẨN HÓA (1).xlsx`;
+    for (const r of rowsFromSheet(priorityDir, klgSheet, prioritySourceShared)) {
+      if (r.rowNumber <= 2) continue;
+      const gabId = String(r.values.get(6) ?? "").trim();
+      const name = String(r.values.get(7) ?? "").trim();
+      if (gabId) priorityGabIds.add(gabId);
+      if (normalize(name)) priorityNames.add(normalize(name));
+    }
   }
 }
 
@@ -506,9 +536,15 @@ function findGabGroupForRef(ref) {
     const nameNorm = normalize(rec.name);
     const nt = tokens(rec.name, true);
     const rt = tokens(ref.owner, true);
+    if (!nameNorm || !rt.length) continue;
+    const ownerSet = new Set(rt);
+    const common = nt.filter((t) => ownerSet.has(t)).length;
+    const required = nt.length <= 3 ? nt.length : nt.length - 1;
     const score = scoreTokens(nt, rt);
     const compact = rt.length <= nt.length + 5;
     const phrase = ownerNorm.includes(nameNorm) || nameNorm.includes(ownerNorm);
+    const strict = (phrase && compact) || (common >= required && score >= 0.7) || score >= 0.94;
+    if (!strict) continue;
     const finalScore = phrase && compact ? Math.max(score, 0.98) : score;
     if (!best || finalScore > best.score) best = { group, score: finalScore };
   }
@@ -669,7 +705,8 @@ const summary = {
   dataRows: records.length,
   csdlRows: refs.length,
   groups: groups.length,
-  priorityKlgFromTrangTinh1: priorityNames.size,
+  prioritySource: prioritySourceLabel,
+  priorityKlgCount: priorityNames.size,
   priorityExistingGabRows: [...priorityByRow.values()].length,
   priorityMissingAddedRows: missingAddRows.filter((item) => item.group?.records?.some(isPriorityRecord) || isPriorityName(item.ref.owner)).length,
   matched,
