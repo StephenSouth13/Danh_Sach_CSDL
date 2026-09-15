@@ -367,11 +367,11 @@ function analyze(record, refs, index, weights) {
 function noteFor(record, result) {
   if (!result?.ref) {
     return detailedNote(
-      "THIẾU/CHƯA CÓ DÒNG CSDL ĐỐI CHIẾU",
+      "DỮ LIỆU DƯ HOẶC CHƯA CÓ TRONG CSDL CHUẨN",
       record,
       null,
-      "Không tìm thấy dòng nào trong 4 tab CSDL có đủ dấu hiệu giống tên cá nhân/đơn vị hoặc tên kỷ lục.",
-      `Kiểm tra lại Data ${quoteSheet(record.sheet)}!C${record.row}, E${record.row}, F${record.row}; nếu đúng là thành tựu hợp lệ thì bổ sung bản ghi tương ứng vào một trong 4 tab CSDL, nếu sai thì sửa lại Data ở các cột C/E/F.`
+      "Không tìm thấy dòng chuẩn tương ứng trong 4 tab CSDL. Vì 4 tab CSDL được xem là chuẩn, dòng Data này cần được xem là dư, sai chủ thể, sai tên kỷ lục hoặc là thông tin ngoài phạm vi CSDL chuẩn.",
+      `Rà soát Data ${quoteSheet(record.sheet)}!C${record.row}, E${record.row}, F${record.row}. Nếu không có chứng cứ khớp với 4 tab CSDL chuẩn thì không nhập như kỷ lục chuẩn; nếu là thông tin bổ trợ thì tách khỏi Data chuẩn, nếu là bản ghi sai thì sửa trực tiếp các cột C/E/F của dòng này.`
     );
   }
 
@@ -392,20 +392,20 @@ function noteFor(record, result) {
     if (titleScore < 0.82) issues.push(`tên kỷ lục ở Data chưa khớp tên kỷ lục trong CSDL`);
     if (!issues.length) {
       return detailedNote(
-        "ĐÃ KHỚP",
+        "ĐÚNG THEO CSDL CHUẨN",
         record,
         ref,
         `Trùng link với ${refId}, tên và tên kỷ lục đủ khớp.`,
-        "Không cần sửa. Có thể giữ nguyên Data; nếu muốn đầy đủ hơn thì chỉ bổ sung link cho những tab CSDL chưa có cột/ô link.",
+        "Không cần sửa Data. Giữ nguyên dòng này.",
         scoreLine
       );
     }
     return detailedNote(
-      "CẦN RÀ SOÁT",
+      "CẦN SỬA DATA",
       record,
       ref,
       `Trùng link với ${refId} nhưng ${issues.join("; ")}.`,
-      `Ưu tiên đối chiếu bằng link ở Data ${quoteSheet(record.sheet)}!F${record.row}. Nếu link đúng bài gốc thì sửa tên/chủ thể hoặc tên kỷ lục tại Data C/E hoặc tại ô CSDL tương ứng; nếu link sai thì sửa Data F${record.row}.`,
+      `Lấy dòng CSDL chuẩn làm căn cứ. Sửa Data ${quoteSheet(record.sheet)}!C${record.row} nếu sai tên/chủ thể, sửa ${quoteSheet(record.sheet)}!E${record.row} nếu sai tên kỷ lục, và sửa ${quoteSheet(record.sheet)}!F${record.row} nếu link Data không phải link chuẩn.`,
       scoreLine
     );
   }
@@ -417,20 +417,20 @@ function noteFor(record, result) {
         ? "Tên và kỷ lục khớp; Data đang thiếu URL nhưng CSDL có link."
         : "Tên cá nhân/đơn vị và tên kỷ lục khớp theo nội dung.");
     const fix = record.url && !ref.link
-      ? `Không cần sửa nội dung chính. Nếu tab ${quoteSheet(ref.sheet)} có/được thêm cột link, nên bổ sung link từ Data ${quoteSheet(record.sheet)}!F${record.row}.`
+      ? `Không cần sửa nội dung chính của Data. Do tab ${quoteSheet(ref.sheet)} không có cột link chuẩn trong vùng đối chiếu, không kết luận lỗi URL cho dòng này.`
       : (!record.url && ref.link
-        ? `Bổ sung link từ ${quoteSheet(ref.sheet)}!${refColumns(ref.sheet).link}${ref.row} vào Data ${quoteSheet(record.sheet)}!F${record.row}.`
+        ? `Bổ sung link chuẩn từ ${quoteSheet(ref.sheet)}!${refColumns(ref.sheet).link}${ref.row} vào Data ${quoteSheet(record.sheet)}!F${record.row}.`
         : "Không cần sửa.");
-    return detailedNote("ĐÃ KHỚP", record, ref, linkReason, fix, scoreLine);
+    return detailedNote("ĐÚNG THEO CSDL CHUẨN", record, ref, linkReason, fix, scoreLine);
   }
 
   if (nameScore >= 0.82 && titleScore >= 0.45) {
     return detailedNote(
-      "CẦN RÀ SOÁT TÊN KỶ LỤC",
+      "CẦN SỬA DATA - TÊN KỶ LỤC CHƯA CHUẨN",
       record,
       ref,
       `CSDL có đúng/gần đúng cá nhân/đơn vị tại ${refId}, nhưng tên kỷ lục chỉ khớp một phần (${titlePct}%).`,
-      `Mở Data ${quoteSheet(record.sheet)}!E${record.row} và ${quoteSheet(ref.sheet)}!${refColumns(ref.sheet).title}${ref.row}; nếu là cùng một thành tựu thì chuẩn hóa lại câu chữ ở một bên, nếu là thành tựu khác thì giữ Data và bổ sung thêm một dòng kỷ lục mới vào tab CSDL phù hợp.`,
+      `Lấy ${quoteSheet(ref.sheet)}!${refColumns(ref.sheet).title}${ref.row} làm tên kỷ lục chuẩn. Sửa Data ${quoteSheet(record.sheet)}!E${record.row}; nếu sau khi kiểm tra thấy đây là thành tựu khác hoàn toàn thì dòng Data này không thuộc CSDL chuẩn hiện tại và cần tách/loại khỏi Data chuẩn.`,
       scoreLine
     );
   }
@@ -441,11 +441,11 @@ function noteFor(record, result) {
       .map((m) => `${quoteSheet(m.ref.sheet)}!R${m.ref.row}: ${shortText(m.ref.title, 90)} (${Math.round(m.titleScore * 100)}%)`)
       .join(" | ");
     return detailedNote(
-      "THIẾU KỶ LỤC TRONG CSDL",
+      "DỮ LIỆU DƯ HOẶC SAI TÊN KỶ LỤC SO VỚI CSDL CHUẨN",
       record,
       ref,
-      `Đã tìm thấy cùng cá nhân/đơn vị tại ${refId}, nhưng các dòng CSDL của người/đơn vị này chưa có tên kỷ lục tương ứng với Data.`,
-      `Nếu Data ${quoteSheet(record.sheet)}!E${record.row} là thành tựu thật cần quản lý, bổ sung một dòng mới vào tab CSDL phù hợp cho chủ thể này. Nếu Data đang ghi sai thành tựu, sửa Data E${record.row}; nếu chủ thể sai, sửa Data C${record.row}.`,
+      `Tìm thấy cùng cá nhân/đơn vị trong CSDL chuẩn tại ${refId}, nhưng không thấy kỷ lục chuẩn nào tương ứng với tên kỷ lục đang ghi trong Data.`,
+      `Đối chiếu lại Data ${quoteSheet(record.sheet)}!E${record.row}. Nếu Data đang ghi sai tên kỷ lục thì sửa theo dòng CSDL chuẩn gần nhất; nếu đây là thành tựu ngoài danh mục 4 tab CSDL chuẩn thì không giữ trong Data chuẩn.`,
       `${scoreLine}${examples ? `; dòng cùng/chung chủ thể khác: ${examples}` : ""}`
     );
   }
@@ -453,21 +453,21 @@ function noteFor(record, result) {
   if (result.bestTitle && result.bestTitle.nameScore < 0.78) {
     const m = result.bestTitle;
     return detailedNote(
-      "CẦN RÀ SOÁT CHỦ THỂ",
+      "CẦN SỬA DATA - CHỦ THỂ CHƯA CHUẨN",
       record,
       m.ref,
       `Tên kỷ lục khá giống ${quoteSheet(m.ref.sheet)}!R${m.ref.row} (${Math.round(m.titleScore * 100)}%) nhưng tên cá nhân/đơn vị không khớp (${Math.round(m.nameScore * 100)}%).`,
-      `Mở Data ${quoteSheet(record.sheet)}!C${record.row} và ${quoteSheet(m.ref.sheet)}!${refColumns(m.ref.sheet).owner}${m.ref.row}; nếu CSDL đúng chủ thể thì sửa Data C${record.row}, nếu Data đúng chủ thể thì cần bổ sung/sửa chủ thể ở tab CSDL.`,
+      `Lấy ${quoteSheet(m.ref.sheet)}!${refColumns(m.ref.sheet).owner}${m.ref.row} làm chủ thể chuẩn. Sửa Data ${quoteSheet(record.sheet)}!C${record.row}; nếu Data không thuộc kỷ lục chuẩn này thì tách/loại khỏi Data chuẩn.`,
       scoreLine
     );
   }
 
   return detailedNote(
-    "THIẾU/CHƯA CHẮC",
+    "DỮ LIỆU DƯ HOẶC CHƯA ĐỦ CĂN CỨ KHỚP CSDL CHUẨN",
     record,
     ref,
     `Chưa có dòng nào khớp chắc; dòng gần nhất chỉ là gợi ý tham khảo, chưa đủ căn cứ để xem là đúng.`,
-    `Kiểm tra lại Data ${quoteSheet(record.sheet)}!C${record.row}, E${record.row}, F${record.row}. Nếu thông tin đúng và không có trong 4 tab CSDL thì bổ sung vào tab phù hợp; nếu dòng gần nhất mới là bản đúng thì sửa Data theo các ô CSDL đã nêu.`,
+    `Kiểm tra lại Data ${quoteSheet(record.sheet)}!C${record.row}, E${record.row}, F${record.row}. Nếu muốn giữ trong Data chuẩn thì phải sửa theo dòng CSDL chuẩn tương ứng; nếu không tìm được dòng chuẩn thì không nhập/không giữ như dữ liệu kỷ lục chuẩn.`,
     scoreLine
   );
 }
@@ -483,6 +483,52 @@ function setCell(rowXml, cellRef, text) {
   return rowXml.replace("</row>", `${cell}</row>`);
 }
 
+function setValueCell(rowXml, cellRef, value) {
+  const clean = String(value ?? "").trim();
+  const isNumber = /^-?\d+(\.\d+)?$/.test(clean);
+  const cell = isNumber
+    ? `<c r="${cellRef}"><v>${clean}</v></c>`
+    : `<c r="${cellRef}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(clean)}</t></is></c>`;
+  const re = new RegExp(`<c\\b[^>]*\\br="${cellRef}"[^>]*(?:\\/>|>[\\s\\S]*?<\\/c>)`);
+  if (re.test(rowXml)) return rowXml.replace(re, cell);
+  const cells = [...rowXml.matchAll(/<c\b[^>]*\br="([A-Z]+\d+)"[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)];
+  for (const c of cells) {
+    if (colIndex(c[1]) > colIndex(cellRef)) return rowXml.slice(0, c.index) + cell + rowXml.slice(c.index);
+  }
+  return rowXml.replace("</row>", `${cell}</row>`);
+}
+
+function rowHasData(row) {
+  return Boolean(`${row.values.get(1) || ""}${row.values.get(2) || ""}${row.values.get(3) || ""}${row.values.get(4) || ""}${row.values.get(5) || ""}${row.values.get(6) || ""}${row.values.get(7) || ""}`.trim());
+}
+
+function matchKey(ref) {
+  return `${ref.sheet}:${ref.row}`;
+}
+
+function authoritativeMatchedRef(record, result) {
+  if (!result?.ref) return null;
+  if (result.kind === "url") return result.ref;
+  if (result.bestSameOwner && result.bestSameOwner.nameScore >= 0.82 && result.bestSameOwner.titleScore >= 0.45) return result.bestSameOwner.ref;
+  if (result.best && result.best.nameScore >= 0.82 && result.best.titleScore >= 0.82) return result.best.ref;
+  if (result.bestTitle && result.bestTitle.titleScore >= 0.82) return result.bestTitle.ref;
+  return null;
+}
+
+function missingDataNote(ref, dataSheetName, targetRow) {
+  const c = refColumns(ref.sheet);
+  const linkFix = c.link && ref.link
+    ? `; nếu cần link thì lấy từ ${quoteSheet(ref.sheet)}!${c.link}${ref.row} đưa vào Data ${quoteSheet(dataSheetName)}!F${targetRow}`
+    : "";
+  return [
+    "Kết luận: THIẾU TRONG DATA",
+    `Dòng Data cần bổ sung: ${quoteSheet(dataSheetName)}!C${targetRow}(fullName), D${targetRow}(time), E${targetRow}(title), F${targetRow}(url), H${targetRow}(Note)`,
+    `Nguồn chuẩn từ CSDL: ${refAudit(ref)}`,
+    "Nhận định: 4 tab CSDL là dữ liệu chuẩn và có bản ghi này, nhưng không tìm thấy dòng tương ứng trong Data_record hiện tại.",
+    `Đề xuất xử lý: Bổ sung vào Data dòng ${targetRow}: C${targetRow}="${shortText(ref.owner, 90)}"; D${targetRow}="${shortText(formatValue(ref.date, "date"), 30)}"; E${targetRow}="${shortText(ref.title, 170)}"${linkFix}.`,
+  ].join("\n");
+}
+
 const refs = loadRefs();
 const weights = buildWeights(refs);
 const index = buildIndex(refs);
@@ -493,12 +539,13 @@ if (!dataSheet) throw new Error("Target Data_record sheet not found.");
 const rows = rowsFromSheet(targetDir, dataSheet, targetShared);
 
 const notes = new Map();
+const matchedStandardRefs = new Set();
 const summary = {
   total: 0,
-  matched: 0,
-  review: 0,
-  missingRecord: 0,
-  missingUncertain: 0,
+  dataOk: 0,
+  dataNeedsFix: 0,
+  dataExtraOrUnclear: 0,
+  missingInData: 0,
 };
 
 for (const r of rows) {
@@ -515,22 +562,49 @@ for (const r of rows) {
     description: r.values.get(7) || "",
   };
   if (!`${record.name}${record.title}${record.url}`.trim()) continue;
-  const note = noteFor(record, analyze(record, refs, index, weights));
+  const result = analyze(record, refs, index, weights);
+  const note = noteFor(record, result);
   notes.set(r.rowNumber, note);
+  const matchedRef = authoritativeMatchedRef(record, result);
+  if (matchedRef) matchedStandardRefs.add(matchKey(matchedRef));
   summary.total++;
-  if (note.includes("Kết luận: ĐÃ KHỚP")) summary.matched++;
-  else if (note.includes("Kết luận: THIẾU KỶ LỤC")) summary.missingRecord++;
-  else if (note.includes("Kết luận: THIẾU")) summary.missingUncertain++;
-  else summary.review++;
+  if (note.includes("Kết luận: ĐÚNG THEO CSDL CHUẨN")) summary.dataOk++;
+  else if (note.includes("Kết luận: CẦN SỬA DATA")) summary.dataNeedsFix++;
+  else summary.dataExtraOrUnclear++;
 }
+
+const blankRows = rows.filter((row) => row.rowNumber > 1 && !rowHasData(row)).map((row) => row.rowNumber);
+const missingStandardRefs = refs.filter((ref) => !matchedStandardRefs.has(matchKey(ref)));
+summary.missingInData = missingStandardRefs.length;
 
 const sheetPath = path.join(targetDir, dataSheet.target);
 let xml = read(sheetPath);
-xml = xml.replace(/<dimension\b[^>]*ref="[^"]*"[^/]*\/>/, (m) => m.replace(/ref="[^"]*"/, `ref="A1:H${Math.max(...rows.map((r) => r.rowNumber))}"`));
+let maxRow = Math.max(...rows.map((r) => r.rowNumber));
 xml = xml.replace(/<row\b[^>]*\br="1"[^>]*>[\s\S]*?<\/row>/, (m) => setCell(m, "H1", "Note"));
 for (const [rowNumber, note] of notes) {
   const re = new RegExp(`<row\\b[^>]*\\br="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`);
   xml = xml.replace(re, (m) => setCell(m, `H${rowNumber}`, note));
+}
+
+missingStandardRefs.forEach((ref, idx) => {
+  const rowNumber = blankRows[idx] || (++maxRow);
+  const note = missingDataNote(ref, dataSheet.name, rowNumber);
+  let rowXml = `<row r="${rowNumber}"></row>`;
+  rowXml = setValueCell(rowXml, `C${rowNumber}`, ref.owner);
+  rowXml = setValueCell(rowXml, `D${rowNumber}`, ref.date);
+  rowXml = setValueCell(rowXml, `E${rowNumber}`, ref.title);
+  rowXml = setValueCell(rowXml, `F${rowNumber}`, ref.link);
+  rowXml = setCell(rowXml, `H${rowNumber}`, note);
+  const re = new RegExp(`<row\\b[^>]*\\br="${rowNumber}"[^>]*>[\\s\\S]*?<\\/row>`);
+  if (re.test(xml)) {
+    xml = xml.replace(re, rowXml);
+  } else {
+    xml = xml.replace("</sheetData>", `${rowXml}</sheetData>`);
+  }
+});
+
+if (/<dimension\b[^>]*ref="[^"]*"[^/]*\/>/.test(xml)) {
+  xml = xml.replace(/<dimension\b[^>]*ref="[^"]*"[^/]*\/>/, (m) => m.replace(/ref="[^"]*"/, `ref="A1:H${maxRow}"`));
 }
 write(sheetPath, xml);
 

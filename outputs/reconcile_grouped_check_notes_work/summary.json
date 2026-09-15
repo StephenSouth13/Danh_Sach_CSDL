@@ -1,0 +1,114 @@
+{
+  "sheet": "Data_record_01-01-2022_01-01-20",
+  "dataRows": 938,
+  "csdlRows": 1484,
+  "groups": 295,
+  "matched": 2,
+  "wrongDate": 285,
+  "gabMissingAddedRows": 1246,
+  "missingInfo": 1,
+  "unmatched": 650,
+  "topMissingGroups": [
+    {
+      "name": "VŨ ĐỨC ĐÔNG ",
+      "row": 927,
+      "count": 19
+    },
+    {
+      "name": "NGUYỄN NHÃ ",
+      "row": 441,
+      "count": 15
+    },
+    {
+      "name": "TS. NGUYỄN NHÃ",
+      "row": 827,
+      "count": 14
+    },
+    {
+      "name": "NGUYỄN HOÀNG ANH",
+      "row": 400,
+      "count": 13
+    },
+    {
+      "name": "VŨ CAO QUÂN",
+      "row": 913,
+      "count": 12
+    },
+    {
+      "name": "NGUYỄN THỊ THANH TÂM",
+      "row": 557,
+      "count": 9
+    },
+    {
+      "name": "TẠ HUY HOÀNG",
+      "row": 681,
+      "count": 7
+    },
+    {
+      "name": "THANH HẰNG (NGUYỄN THỊ HẰNG)",
+      "row": 699,
+      "count": 7
+    },
+    {
+      "name": "NGUYỄN PHƯƠNG",
+      "row": 466,
+      "count": 6
+    },
+    {
+      "name": "THANH HÀ (NGUYỄN THỊ HÀ)",
+      "row": 697,
+      "count": 6
+    },
+    {
+      "name": "BÙI VĂN NGỌ",
+      "row": 10,
+      "count": 5
+    },
+    {
+      "name": "NGUYỄN NGUYỆT NGA ",
+      "row": 439,
+      "count": 5
+    },
+    {
+      "name": "BÙI VĂN NGỢI",
+      "row": 11,
+      "count": 4
+    },
+    {
+      "name": "ĐÀO XUÂN TÌNH",
+      "row": 49,
+      "count": 4
+    },
+    {
+      "name": "ĐẶNG ĐỨC THÀNH ",
+      "row": 59,
+      "count": 4
+    },
+    {
+      "name": "LÊ THẠNH",
+      "row": 265,
+      "count": 4
+    },
+    {
+      "name": "LÊ VĂN NƯNG ",
+      "row": 316,
+      "count": 4
+    },
+    {
+      "name": "NGUYỄN ĐỨC ĐOÀN ",
+      "row": 395,
+      "count": 4
+    },
+    {
+      "name": "NGUYỄN HỮU TRỌNG ",
+      "row": 410,
+      "count": 4
+    },
+    {
+      "name": "NGUYỄN KHÔI NGUYÊN ",
+      "row": 420,
+      "count": 4
+    }
+  ],
+  "outputXlsx": "D:\\KLG\\Danh_Sach_CSDL\\outputs\\reconciled_gab_records_customer_feedback.xlsx"
+}
