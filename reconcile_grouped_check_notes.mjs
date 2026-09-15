@@ -384,6 +384,18 @@ const targetSheets = sheetMap(targetDir);
 const targetShared = sharedStrings(targetDir);
 const dataSheet = [...targetSheets.values()].find((s) => s.name.startsWith("Data_record_01-01-2022_01-01-20"));
 if (!dataSheet) throw new Error("Không thấy tab Data_record_01-01-2022_01-01-20 trong file Data.");
+const prioritySheet = [...targetSheets.values()].find((s) => s.name.startsWith("Trang tính1"));
+const priorityNames = new Set();
+const priorityGabIds = new Set();
+if (prioritySheet) {
+  for (const r of rowsFromSheet(targetDir, prioritySheet, targetShared)) {
+    if (r.rowNumber <= 1) continue;
+    const gabId = String(r.values.get(2) ?? "").trim();
+    const name = String(r.values.get(3) ?? "").trim();
+    if (gabId) priorityGabIds.add(gabId);
+    if (normalize(name)) priorityNames.add(normalize(name));
+  }
+}
 
 const dataRows = rowsFromSheet(targetDir, dataSheet, targetShared).filter((r) => r.rowNumber > 1 && dataRowHasContent(r));
 const records = dataRows.map((r) => ({
@@ -407,11 +419,26 @@ for (const rec of records) {
   else groups.push({ key, records: [rec] });
 }
 
+function isPriorityName(name) {
+  const n = normalize(name);
+  if (!n) return false;
+  if (priorityNames.has(n)) return true;
+  for (const p of priorityNames) {
+    if (n.includes(p) || p.includes(n)) return true;
+  }
+  return false;
+}
+
+function isPriorityRecord(record) {
+  return priorityGabIds.has(record.gabId) || isPriorityName(record.name);
+}
+
 const statusByRow = new Map();
 const noteByGroupStart = new Map();
 const mergeRefs = [];
 const provinceByRow = new Map();
 const fieldByRow = new Map();
+const priorityByRow = new Map();
 const missingAddRows = [];
 const missingByGroup = [];
 const matchedStandardKeysGlobal = new Set();
@@ -430,6 +457,7 @@ for (const group of groups) {
     const status = statusFor(rec, match);
     statuses.push(status);
     statusByRow.set(rec.row, status);
+    if (isPriorityRecord(rec)) priorityByRow.set(rec.row, "Ưu tiên hội ngộ");
     if (match?.ref && match.titleScore >= 0.42) {
       provinceByRow.set(rec.row, match.ref.province || "");
       fieldByRow.set(rec.row, match.ref.field || "");
@@ -476,6 +504,13 @@ for (const ref of refs) {
   missingAddRows.push({ group: group || { records: [{ gabId: "", row: "" }] }, ref, sourceStartRow: group?.records?.[0]?.row || "" });
 }
 
+missingAddRows.sort((a, b) => {
+  const ap = a.group?.records?.some(isPriorityRecord) || isPriorityName(a.ref.owner);
+  const bp = b.group?.records?.some(isPriorityRecord) || isPriorityName(b.ref.owner);
+  if (ap !== bp) return ap ? -1 : 1;
+  return a.ref.row - b.ref.row;
+});
+
 const sheetPath = path.join(targetDir, dataSheet.target);
 let xml = read(sheetPath);
 const headerRow = xml.match(/<row\b[^>]*\br="1"[^>]*>[\s\S]*?<\/row>/)?.[0] || "";
@@ -485,6 +520,7 @@ xml = xml.replace(/<row\b[^>]*\br="1"[^>]*>[\s\S]*?<\/row>/, (m) => {
   out = styleHeader(out, "I1", gStyle, "Note");
   out = styleHeader(out, "J1", gStyle, "Tỉnh");
   out = styleHeader(out, "K1", gStyle, "LĨNH VỰC XÁC LẬP");
+  out = styleHeader(out, "L1", gStyle, "Ưu tiên");
   return out;
 });
 for (const rec of records) {
@@ -494,6 +530,7 @@ for (const rec of records) {
     out = setCell(out, `I${rec.row}`, noteByGroupStart.get(rec.row) || "");
     out = setCell(out, `J${rec.row}`, provinceByRow.get(rec.row) || "");
     out = setCell(out, `K${rec.row}`, fieldByRow.get(rec.row) || "");
+    out = setCell(out, `L${rec.row}`, priorityByRow.get(rec.row) || "");
     return out;
   });
 }
@@ -525,12 +562,13 @@ for (const item of missingAddRows) {
   rowXml = setCell(rowXml, `I${rowNo}`, missingNote(rowNo, item));
   rowXml = setCell(rowXml, `J${rowNo}`, item.ref.province);
   rowXml = setCell(rowXml, `K${rowNo}`, item.ref.field);
+  rowXml = setCell(rowXml, `L${rowNo}`, (item.group?.records?.some(isPriorityRecord) || isPriorityName(item.ref.owner)) ? "Ưu tiên hội ngộ" : "");
   appendedRowXml.push(rowXml);
 }
 xml = xml.replace("</sheetData>", `${appendedRowXml.join("")}</sheetData>`);
 xml = clearOldHiMerges(xml);
 xml = addMerges(xml, mergeRefs);
-xml = xml.replace(/<dimension\b[^>]*ref="[^"]*"[^/]*\/>/, (m) => m.replace(/ref="[^"]*"/, `ref="A1:K${appendRow - 1}"`));
+xml = xml.replace(/<dimension\b[^>]*ref="[^"]*"[^/]*\/>/, (m) => m.replace(/ref="[^"]*"/, `ref="A1:L${appendRow - 1}"`));
 write(sheetPath, xml);
 
 const zipOut = path.join(outDir, "out.zip");
@@ -543,6 +581,9 @@ const summary = {
   dataRows: records.length,
   csdlRows: refs.length,
   groups: groups.length,
+  priorityKlgFromTrangTinh1: priorityNames.size,
+  priorityExistingGabRows: [...priorityByRow.values()].length,
+  priorityMissingAddedRows: missingAddRows.filter((item) => item.group?.records?.some(isPriorityRecord) || isPriorityName(item.ref.owner)).length,
   matched,
   wrongDate,
   gabMissingAddedRows: missingAddRows.length,

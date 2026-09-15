@@ -25,7 +25,7 @@ function rowValues(rowNo) {
   const out = {};
   for (const m of row.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
     const ref = m[1].match(/\br="([^"]+)"/)?.[1];
-    if (ref && /^[ABCHIJK]\d+$/.test(ref)) out[ref] = val(m[2], m[1]).slice(0, 500);
+    if (ref && /^[ABCHIJKL]\d+$/.test(ref)) out[ref] = val(m[2], m[1]).slice(0, 500);
   }
   return out;
 }
