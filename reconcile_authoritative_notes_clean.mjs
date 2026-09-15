@@ -143,6 +143,10 @@ function dateKey(value = "") {
   const year = s.match(/\b(19|20)\d{2}\b/)?.[0];
   return year || normalize(s);
 }
+function hasDateLike(value = "") {
+  const s = excelDateText(value);
+  return /\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b/.test(s) || /\b(19|20)\d{2}\b/.test(s);
+}
 function short(s = "", max = 130) {
   const t = String(s ?? "").replace(/\s+/g, " ").trim();
   return t.length > max ? `${t.slice(0, max - 3)}...` : t;
@@ -177,6 +181,29 @@ function refCols(sheetName, r) {
   if (sheetName === "CSDL KLVW") return { owner: r.values.get(7), title: r.values.get(6), date: r.values.get(5), province: r.values.get(9) || r.values.get(8), field: r.values.get(10) || "" };
   return { owner: r.values.get(2), title: r.values.get(3), date: r.values.get(5) || r.values.get(4), province: r.values.get(7), field: "" };
 }
+function splitOwnerTitle(raw) {
+  let owner = String(raw.owner ?? "").trim();
+  let title = String(raw.title ?? "").trim();
+  if (!owner && title.includes("\n")) {
+    const lines = title.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    if (lines.length >= 2) {
+      owner = lines[0];
+      title = lines.slice(1).join(" ");
+    }
+  }
+  return { ...raw, owner, title };
+}
+function dataDuplicateKey(row) {
+  return [row.recordId, row.gabId, normalize(row.fullName), dateKey(row.time), normalize(row.title), normalize(row.url)].join("|");
+}
+function detailAction(prefix, x) {
+  const row = x.row;
+  const ref = x.result?.matchedRef;
+  if (ref) {
+    return `${prefix} Data dòng ${row.rowNumber}: "${short(row.title, 120)}"; ngày GAB/Data="${excelDateText(row.time) || "trống"}"; ngày chuẩn CSDL="${excelDateText(ref.date) || "trống"}"; nguồn chuẩn ${ref.sheet}!${ref.row}. Cần sửa trên GAB theo ngày/thông tin chuẩn này.`;
+  }
+  return `${prefix} Data dòng ${row.rowNumber}: "${short(row.title, 120)}"; ngày GAB/Data="${excelDateText(row.time) || "trống"}". Chưa có thành tựu tương ứng trong CSDL chuẩn; cần xác minh đây là dữ liệu dư/ngoài CSDL hay phải chuẩn hóa tên kỷ lục.`;
+}
 
 resetDir(outDir);
 fs.mkdirSync(srcDir, { recursive: true });
@@ -200,7 +227,7 @@ for (const name of ["CSDL KLVN", "CSDL KLVW", "CSDL KL CA", "CSDL KLTG"]) {
   if (!sheet) continue;
   for (const r of rowsFromSheet(refDir, sheet, refShared)) {
     if (r.rowNumber < 3) continue;
-    const raw = refCols(name, r);
+    const raw = splitOwnerTitle(refCols(name, r));
     const owner = String(raw.owner ?? "").trim();
     const title = String(raw.title ?? "").trim();
     if (!owner || !title) continue;
@@ -232,8 +259,13 @@ function ownerRefs(name) {
 function bestRefForData(row, candidates) {
   let best = null;
   const dt = tokens(row.title);
+  const titleScope = normalize(row.title);
   for (const ref of candidates) {
-    const s = score(dt, ref.titleTokens);
+    let s = score(dt, ref.titleTokens);
+    if (titleScope.includes("the gioi") && ref.sheet === "CSDL KLTG") s += 0.25;
+    if (titleScope.includes("chau a") && ref.sheet === "CSDL KL CA") s += 0.25;
+    if (titleScope.includes("viet nam") && ref.sheet === "CSDL KLVN") s += 0.15;
+    if (titleScope.includes("toan cau") && ref.sheet === "CSDL KLVW") s += 0.15;
     if (!best || s > best.score) best = { ref, score: s };
   }
   return best;
@@ -249,6 +281,13 @@ const dataRows = rowsFromSheet(srcDir, dataSheet, srcShared).filter((r) => r.row
   url: String(r.values.get(6) ?? "").trim(),
   desc: String(r.values.get(7) ?? "").trim(),
 })).filter((r) => r.recordId || r.fullName || r.title);
+const duplicateFirst = new Map();
+const duplicateRows = new Map();
+for (const row of dataRows) {
+  const dupKey = dataDuplicateKey(row);
+  if (duplicateFirst.has(dupKey)) duplicateRows.set(row.rowNumber, duplicateFirst.get(dupKey));
+  else duplicateFirst.set(dupKey, row.rowNumber);
+}
 const byName = new Map();
 const rowResult = new Map();
 for (const row of dataRows) {
@@ -266,13 +305,20 @@ for (const row of dataRows) {
     const dataDate = dateKey(row.time);
     const refDate = matchedRef.dateKey;
     const dateOk = dataDate && refDate && (dataDate === refDate || dataDate.includes(refDate) || refDate.includes(dataDate));
-    if (dateOk) {
+    if (!hasDateLike(matchedRef.date)) {
+      check = "SAI/CẦN RÀ: CSDL chưa có ngày chuẩn rõ";
+      note = `Tên kỷ lục khớp CSDL nhưng ô thời gian trong CSDL chuẩn chưa phải ngày rõ ràng: "${excelDateText(matchedRef.date) || "trống"}". Data/GAB đang ghi "${excelDateText(row.time) || "trống"}". Cần hỏi/xác nhận ngày xác lập chuẩn tại ${refMeta(matchedRef)} trước khi sửa GAB.`;
+    } else if (dateOk) {
       check = "ĐÚNG: Khớp CSDL chuẩn";
       note = `Khớp theo kỷ lục gia, tên kỷ lục và thời gian xác lập với ${refMeta(matchedRef)}. Không cần xử lý thành tựu này.`;
     } else {
       check = "SAI: Sai thời gian xác lập";
       note = `Tên kỷ lục khớp CSDL nhưng ngày trên GAB/Data là "${excelDateText(row.time) || "trống"}", ngày chuẩn CSDL là "${excelDateText(matchedRef.date) || "trống"}". Cần sửa thời gian xác lập trên GAB theo ${refMeta(matchedRef)}.`;
     }
+  }
+  if (duplicateRows.has(row.rowNumber)) {
+    check = "SAI/CẦN RÀ: Trùng dòng GAB";
+    note = `Dòng này trùng dữ liệu với Data dòng ${duplicateRows.get(row.rowNumber)}: cùng recordId, gabId, kỷ lục gia, ngày, tên thành tựu và link. Không tính là thành tựu khác nhau; cần kiểm tra file xuất/GAB có bị duplicate record không.`;
   }
   rowResult.set(row.rowNumber, { check, note, matchedRef });
   const key = normalize(row.fullName);
