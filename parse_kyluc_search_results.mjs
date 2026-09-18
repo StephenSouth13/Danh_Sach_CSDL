@@ -26,9 +26,11 @@ const decode = (s) => s
 const norm = (s) => decode(s).normalize('NFC').toLocaleLowerCase('vi');
 
 const output = {};
+const broadOutput = {};
 for (const [slug, name] of targets) {
   const candidates = [];
-  for (let page = 1; page <= 10; page++) {
+  const broad = [];
+  for (let page = 1; page <= 100; page++) {
     const file = path.join(root, `search_${slug}_${page}.html`);
     if (!fs.existsSync(file)) continue;
     const html = fs.readFileSync(file, 'utf8');
@@ -43,15 +45,18 @@ for (const [slug, name] of targets) {
       const tokens = norm(name).split(' ');
       const tokenHits = tokens.filter((token) => haystack.includes(token)).length;
       const recordSignal = /kỷ lục|vietkings|xác lập|record/i.test(`${title} ${description}`);
+      if (recordSignal) broad.push({ page, tokenHits, title, description, url: `https://kyluc.vn${titleMatch[1]}` });
       if (haystack.includes(norm(name)) || (tokenHits >= Math.max(2, tokens.length - 1) && recordSignal)) {
         candidates.push({ page, tokenHits, recordSignal, title, description, url: `https://kyluc.vn${titleMatch[1]}` });
       }
     }
   }
   output[name] = candidates.sort((a, b) => b.tokenHits - a.tokenHits || Number(b.recordSignal) - Number(a.recordSignal));
+  broadOutput[name] = broad.sort((a, b) => b.tokenHits - a.tokenHits);
 }
 
 fs.writeFileSync(path.join(root, 'kyluc_candidates.json'), JSON.stringify(output, null, 2));
+fs.writeFileSync(path.join(root, 'kyluc_broad_candidates.json'), JSON.stringify(broadOutput, null, 2));
 for (const [name, rows] of Object.entries(output)) {
   console.log(`\n## ${name}: ${rows.length}`);
   for (const row of rows) console.log(`- p${row.page} ${row.title}\n  ${row.url}\n  ${row.description}`);
