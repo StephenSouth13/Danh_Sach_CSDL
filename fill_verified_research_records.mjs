@@ -21,7 +21,23 @@ const updates = [{
     O: "https://kyluc.vn/tin-tuc/ky-luc-viet-nam/vietkings-ky-luc-gia-9x-ve-tranh-bang-ca-phe-va-tuong-ot",
     S: "Đã xác minh Lê Thị Út (nghệ danh Kim Út) và thành tựu từ Kyluc.vn; nguồn công khai chỉ nêu năm 2018, chưa nêu ngày trao cụ thể.",
   },
-}];
+}, ...[
+  [346, "NGÔ THỊ HOÀNG NGÂN", "https://gab.world/vi/bank/cywvPTsZ3WfGC6wgwKOpjyV5AyC3"],
+  [351, "NGUYỄN THỊ KIM OANH", "https://gab.world/vi/bank/hsqsnluabRfULqXSTUzri3SDEkj2"],
+  [352, "NGUYỄN QUANG THẮNG", "https://gab.world/vi/bank/p7rJE060HPO4jGYzCzoxwXk95NI3"],
+  [360, "NGUYỄN HOÀNG BÁCH", "https://gab.world/vi/bank/9Wdfa7Tt3iPVj97W8HLlTJMCInf1"],
+  [361, "TRẦN HOÀI THUẬN", "https://gab.world/vi/bank/tUgJufFNamdSohTUxhYaddwmT972"],
+  [362, "LƯƠNG THÀNH NHẬT", "https://gab.world/vi/bank/R0eSAPU7GRaQGYSbQTs5mFwmBsu1"],
+  [363, "HUỲNH HOÀNG SƠN", "https://gab.world/vi/bank/AAs07f59GsRj7xFcBYwDteuOISp2"],
+].map(([row, expectedName, gabUrl]) => ({
+  row,
+  expectedName,
+  values: {
+    F: gabUrl,
+    K: "CÓ GAB - CHƯA XÁC MINH THÀNH TỰU",
+    S: "Đã xác minh link hồ sơ GAB do người dùng cung cấp; đang tiếp tục đối chiếu nội dung thành tựu trên Kyluc.vn/VietKings.",
+  },
+}))];
 
 const escapeXml = (value = "") => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
   .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
