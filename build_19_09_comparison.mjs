@@ -138,9 +138,9 @@ for (const person of standardPeople.values()) {
       const score = achievementScore(s, g);
       if (!best || score > best.score) best = { g, score };
     }
-    if (!best || best.score < 0.62) {
+    if (!best) {
       const status = candidates.length ? 'GAB THIẾU THÀNH TỰU' : 'CHƯA CÓ HỒ SƠ TRÊN GAB';
-      output.push({ status, issues: candidates.length ? 'Không tìm thấy thành tựu tương ứng trong dữ liệu GAB xuất về.' : 'Không tìm thấy người theo link GAB hoặc tên chuẩn hóa.', s, g: null, score: best?.score ?? 0 });
+      output.push({ status, issues: candidates.length ? 'Không tìm thấy thành tựu tương ứng trong dữ liệu GAB xuất về.' : 'Không tìm thấy người theo link GAB hoặc tên chuẩn hóa.', s, g: null, profileGab: candidates[0]?.gab || '', score: best?.score ?? 0 });
       continue;
     }
     used.add(best.g.sourceRow);
@@ -152,6 +152,7 @@ for (const person of standardPeople.values()) {
     if (sTime && !g.time) issues.push('GAB thiếu thời gian');
     else if (sTime && g.time && dateYear(sTime) && dateYear(g.time) && dateYear(sTime) !== dateYear(g.time)) issues.push(`Lệch thời gian: chuẩn ${sTime}, GAB ${g.time}`);
     if ((s.gabTitle || s.recordTitle) && best.score < 0.8) issues.push('Tiêu đề chưa đồng nhất');
+    if (best.score < 0.62) issues.push(`Cần xác minh ghép: độ khớp tiêu đề thấp (${Math.round(best.score * 100)}%) nhưng record thuộc đúng hồ sơ KLG`);
     if (validUrl(s.article) && !validUrl(g.url)) issues.push('GAB thiếu link bài');
     else if (validUrl(s.article) && validUrl(g.url) && s.article.replace(/\/$/, '').toLowerCase() !== g.url.replace(/\/$/, '').toLowerCase() && best.score < 0.9) issues.push('Link bài khác');
     if (s.description && !g.description) issues.push('GAB thiếu mô tả');
@@ -245,7 +246,7 @@ const statusStyle = {
   'GAB CÓ THÊM - 200 CHƯA CÓ': xfStart + 4,
   'ĐỦ - KHỚP': xfStart + 5,
 };
-const detailOutput = output.filter((r) => r.s?.sourceRow);
+const detailOutput = output.filter((r) => r.s?.sourceRow).sort((a, b) => a.s.sourceRow - b.s.sourceRow);
 detailOutput.forEach((r, i) => {
   const s = r.s || {}, g = r.g || {};
   const summary = summaryByPerson.get(personKey(s.name || g.name, s.gab || g.gab));
@@ -261,7 +262,9 @@ detailOutput.forEach((r, i) => {
       : (gabOnly
       ? 'Kiểm tra đúng KLG, đúng loại thành tựu và nguồn xác thực; chỉ bổ sung file chuẩn sau khi xác minh.'
       : (r.g ? 'Kiểm tra các trường đang lệch; dòng đủ-khớp không cần xử lý.' : 'Kiểm tra lại link, thời gian và nội dung rồi bổ sung thành tựu chuẩn vào GAB.')));
-  const vals = [displayStatus, displayIssues, action, r.score ? `${Math.round(r.score * 100)}%` : '', summary?.standardCount ?? '', summary?.presentCount ?? '', summary?.missingCount ?? '', summary?.extraCount ?? '', summary?.extraTitles ?? '', s.sourceRow || '', s.stt || '', s.profile || '', s.cert || '', s.officialDate || '', s.recordTitle || '', s.gab || '', s.name || '', s.birth || '', s.province || '', s.avatar || '', s.recordType || '', s.otherTitle || '', s.gabTime || '', s.gabTitle || '', s.article || '', s.description || '', s.image || '', s.youtube || '', s.social || '', s.verified || '', g.recordId || '', g.gab || '', g.name || '', g.time || '', g.title || '', g.url || '', g.description || '', g.sourceRow || ''];
+  const noRecord = !g.recordId;
+  const gabProfile = g.gab || r.profileGab || (validUrl(s.gab) ? s.gab : 'KHÔNG TÌM THẤY HỒ SƠ GAB');
+  const vals = [displayStatus, displayIssues, action, r.score ? `${Math.round(r.score * 100)}%` : 'KHÔNG GHÉP', summary?.standardCount ?? '', summary?.presentCount ?? '', summary?.missingCount ?? '', summary?.extraCount ?? '', summary?.extraTitles || 'KHÔNG CÓ', s.sourceRow || '', s.stt || '', s.profile || '', s.cert || '', s.officialDate || '', s.recordTitle || '', s.gab || 'CHƯA CÓ LINK HỒ SƠ TRONG TAB CHUẨN', s.name || '', s.birth || 'CHƯA CÓ', s.province || 'CHƯA CÓ', s.avatar || 'CHƯA CÓ', s.recordType || 'CHƯA PHÂN LOẠI', s.otherTitle || 'KHÔNG CÓ', s.gabTime || 'CHƯA CÓ', s.gabTitle || 'CHƯA CÓ', s.article || 'CHƯA CÓ', s.description || 'CHƯA CÓ', s.image || 'CHƯA CÓ', s.youtube || 'CHƯA CÓ', s.social || 'CHƯA CÓ', s.verified || 'CHƯA CÓ', g.recordId || 'KHÔNG CÓ RECORD TƯƠNG ỨNG', gabProfile, g.name || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU TÊN'), g.time || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU THỜI GIAN'), g.title || 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG', g.url || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU LINK BÀI'), g.description || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU MÔ TẢ'), g.sourceRow || 'KHÔNG CÓ'];
   const base = statusStyle[r.status] ?? xfStart + 7;
   table.push(makeRow(vals, i + 7, vals.map((_, c) => c <= 2 ? base : (c >= 10 && c <= 29 ? xfStart + 6 : (c >= 30 ? xfStart + 4 : xfStart + 7))), 64));
 });
@@ -277,6 +280,7 @@ wb = wb.replace(/<sheet[^>]*name="ĐỐI CHIẾU GAB - 200"[^>]*\/>/g, '').repla
 write(path.join(dir, 'xl/workbook.xml'), wb);
 let rels = read(path.join(dir, 'xl/_rels/workbook.xml.rels'));
 rels = rels.replace(/<Relationship[^>]*Id="rId3"[^>]*\/>/g, '').replace('</Relationships>', '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/></Relationships>');
+if (!rels.includes('/sharedStrings')) rels = rels.replace('</Relationships>', '<Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>');
 write(path.join(dir, 'xl/_rels/workbook.xml.rels'), rels);
 let types = read(path.join(dir, '[Content_Types].xml'));
 if (!types.includes('/xl/worksheets/sheet3.xml')) types = types.replace('</Types>', '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
