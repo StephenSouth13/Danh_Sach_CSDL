@@ -174,12 +174,17 @@ const personSummaries = [...standardPeople.values()].map((person) => {
     presentCount: present.length,
     missingCount: missing.length,
     extraCount: extras.length,
-    status: missing.length ? `THIẾU ${missing.length} THÀNH TỰU TRÊN GAB` : (extras.length ? `ĐÃ ĐỦ CHUẨN; GAB CÓ THÊM ${extras.length}` : 'ĐỦ - KHỚP'),
+    status: missing.length ? `THIẾU ${missing.length} THÀNH TỰU TRÊN GAB` : (extras.length ? `KHÔNG THIẾU THEO CHUẨN; ${extras.length} DÒNG GAB CẦN XÁC MINH` : 'ĐỦ - KHỚP'),
     presentTitles: list(present, (x) => x.g?.title || x.s?.gabTitle || x.s?.recordTitle || ''),
     missingTitles: list(missing, (x) => x.s?.gabTitle || x.s?.recordTitle || ''),
     extraTitles: list(extras, (x) => x.g?.title || ''),
   };
 }).sort((a, b) => norm(a.name).localeCompare(norm(b.name)));
+const summaryByPerson = new Map(personSummaries.map((p) => [gabKey(p.gab) || norm(p.name), p]));
+const standardCompareKey = (s) => `${gabKey(s.gab) || norm(s.name)}|${norm(s.gabTitle || s.recordTitle)}|${s.gabTime || s.officialDate}`;
+const standardKeyCount = new Map();
+for (const s of standard) standardKeyCount.set(standardCompareKey(s), (standardKeyCount.get(standardCompareKey(s)) ?? 0) + 1);
+const duplicateStandardSet = new Set([...standardKeyCount].filter(([, count]) => count > 1).map(([key]) => key));
 
 let styles = read(path.join(dir, 'xl/styles.xml'));
 function append(xml, tag, item) {
@@ -211,10 +216,10 @@ const makeCells = (vals, n, startCol, style) => vals.map((v, i) => cell(v, `${co
 const table = [];
 table.push(makeRow(['ĐỐI CHIẾU DỮ LIỆU GAB VỚI DANH SÁCH 200 NGƯỜI ĐÃ CHUẨN'], 1, xfStart, 32));
 table.push(makeRow([`Phạm vi: ${unique200} KLG trong danh sách chuẩn | ${standard.length} dòng thành tựu chuẩn | ${gab.length} thành tựu GAB sau khi loại ${gabRaw.length - gab.length} dòng trùng | ${matchedPeople} KLG đã ghép được với GAB.`], 2, xfStart + 1, 28));
-table.push(makeRow([`GAB thiếu: ${counts['GAB THIẾU THÀNH TỰU']} | Chưa có hồ sơ GAB: ${counts['CHƯA CÓ HỒ SƠ TRÊN GAB']} | Sai/chưa đồng nhất: ${counts['SAI/CHƯA ĐỒNG NHẤT']} | GAB có thêm: ${counts['GAB CÓ THÊM - 200 CHƯA CÓ']} | Đủ-khớp: ${counts['ĐỦ - KHỚP']}`], 3, xfStart + 1, 28));
-table.push(makeRow(['Ưu tiên xử lý các dòng màu đỏ/cam. Dòng xanh dương là thành tựu mới phía GAB có thể cần bổ sung ngược vào danh sách 200; dòng xanh lá đã khớp các trường chính.'], 4, xfStart + 1, 28));
+table.push(makeRow([`GAB thiếu: ${counts['GAB THIẾU THÀNH TỰU']} | Chưa có hồ sơ GAB: ${counts['CHƯA CÓ HỒ SƠ TRÊN GAB']} | Sai/chưa đồng nhất: ${counts['SAI/CHƯA ĐỒNG NHẤT']} | Chỉ có trên GAB - cần xác minh: ${counts['GAB CÓ THÊM - 200 CHƯA CÓ']} | Đủ-khớp: ${counts['ĐỦ - KHỚP']}`], 3, xfStart + 1, 28));
+table.push(makeRow(['Ưu tiên dòng đỏ/cam. Dòng xanh dương chỉ cho biết dữ liệu đang xuất hiện riêng trên GAB, chưa kết luận file chuẩn thiếu hay GAB sai; phải xác minh nguồn và đúng loại thành tựu trước khi cập nhật.'], 4, xfStart + 1, 36));
 table.push('<row r="5" ht="8" customHeight="1"/>');
-const headers = ['STT', 'TRẠNG THÁI', 'THIẾU / SAI / CŨ', 'HỌ TÊN CHUẨN', 'LINK HỒ SƠ GAB', 'LOẠI KỶ LỤC', 'SỐ XÁC LẬP', 'NGÀY CHUẨN', 'NGÀY GAB', 'TIÊU ĐỀ CHUẨN', 'TIÊU ĐỀ GAB', 'LINK BÀI CHUẨN', 'LINK BÀI GAB', 'MÔ TẢ CHUẨN', 'MÔ TẢ GAB', 'THÀNH TỰU XÁC THỰC / GHI CHÚ', 'ĐỘ KHỚP', 'DÒNG TAB 200', 'DÒNG TAB GAB'];
+const headers = ['STT', 'HỌ TÊN KLG', 'TRẠNG THÁI DÒNG', 'THIẾU / SAI / CŨ', 'LOẠI KỶ LỤC', 'TỔNG CHUẨN', 'ĐÃ GHÉP', 'THIẾU TRÊN GAB', 'CHỈ CÓ TRÊN GAB', 'KẾT LUẬN THEO KLG', 'TIÊU ĐỀ CHUẨN', 'TIÊU ĐỀ GAB', 'NGÀY CHUẨN', 'NGÀY GAB', 'LINK BÀI CHUẨN', 'LINK BÀI GAB', 'recordId', 'gabId', 'SỐ XÁC LẬP', 'ĐỘ KHỚP', 'HƯỚNG XỬ LÝ', 'MÔ TẢ CHUẨN', 'MÔ TẢ GAB', 'THÀNH TỰU XÁC THỰC / GHI CHÚ', 'DÒNG TAB 200', 'DÒNG TAB GAB'];
 table.push(makeRow(headers, 6, xfStart, 58));
 const statusStyle = {
   'GAB THIẾU THÀNH TỰU': xfStart + 2,
@@ -225,30 +230,24 @@ const statusStyle = {
 };
 output.forEach((r, i) => {
   const s = r.s || {}, g = r.g || {};
-  const vals = [i + 1, r.status, r.issues, s.name || g.name || '', s.gab || g.gab || '', s.recordType || '', s.cert || '', s.gabTime || s.officialDate || '', g.time || '', s.gabTitle || s.recordTitle || '', g.title || '', s.article || '', g.url || '', s.description || '', g.description || '', s.verified || s.note || '', r.score ? `${Math.round(r.score * 100)}%` : '', s.sourceRow || '', g.sourceRow || ''];
+  const summary = summaryByPerson.get(gabKey(s.gab || g.gab) || norm(s.name || g.name));
+  const gabOnly = r.status === statusNames[3];
+  const duplicatedStandard = s.sourceRow && duplicateStandardSet.has(standardCompareKey(s));
+  const displayStatus = duplicatedStandard ? 'TRÙNG TRONG FILE CHUẨN - CẦN XÁC MINH' : (gabOnly ? 'CHỈ CÓ TRÊN GAB - CẦN XÁC MINH' : r.status);
+  const displayIssues = duplicatedStandard ? `Nội dung chuẩn đang lặp ở nhiều dòng; kiểm tra trước khi kết luận GAB thiếu. ${r.issues}` : r.issues;
+  const action = duplicatedStandard
+    ? 'Kiểm tra hai dòng nguồn trong tab chuẩn; gộp hoặc giữ riêng nếu có bằng chứng là hai lần xác lập khác nhau.'
+    : (gabOnly
+      ? 'Kiểm tra đúng KLG, đúng loại thành tựu và nguồn xác thực; chỉ bổ sung file chuẩn sau khi xác minh.'
+      : (r.g ? 'Kiểm tra các trường đang lệch; dòng đủ-khớp không cần xử lý.' : 'Kiểm tra lại link, thời gian và nội dung rồi bổ sung thành tựu chuẩn vào GAB.'));
+  const vals = [i + 1, s.name || g.name || '', displayStatus, displayIssues, s.recordType || '', summary?.standardCount ?? '', summary?.presentCount ?? '', summary?.missingCount ?? '', summary?.extraCount ?? '', summary?.status ?? '', s.gabTitle || s.recordTitle || '', g.title || '', s.gabTime || s.officialDate || '', g.time || '', s.article || '', g.url || '', g.recordId || '', g.gab || s.gab || '', s.cert || '', r.score ? `${Math.round(r.score * 100)}%` : '', action, s.description || '', g.description || '', s.verified || s.note || '', s.sourceRow || '', g.sourceRow || ''];
   const base = statusStyle[r.status] ?? xfStart + 7;
-  table.push(makeRow(vals, i + 7, vals.map((_, c) => c === 1 || c === 2 ? base : (c >= 8 && c <= 14 ? xfStart + 6 : xfStart + 7)), 64));
+  table.push(makeRow(vals, i + 7, vals.map((_, c) => c === 2 || c === 3 ? base : (c >= 10 && c <= 15 ? xfStart + 6 : xfStart + 7)), 64));
 });
-const summaryHeaders = ['KỶ LỤC GIA', 'LINK HỒ SƠ GAB', 'TỔNG CHUẨN', 'ĐÃ CÓ / TRÙNG', 'CÒN THIẾU', 'GAB CÓ THÊM', 'TÌNH TRẠNG KLG', 'CỤ THỂ ĐÃ CÓ / TRÙNG', 'CỤ THỂ CÒN THIẾU', 'CỤ THỂ GAB CÓ THÊM'];
-const summaryRows = new Map();
-summaryRows.set(1, makeCells(['TỔNG HỢP THEO KỶ LỤC GIA'], 1, 21, xfStart));
-summaryRows.set(2, makeCells(['Mỗi KLG một dòng: xem ngay thành tựu nào đã có/trùng, còn thiếu và dữ liệu GAB có thêm.'], 2, 21, xfStart + 1));
-summaryRows.set(6, makeCells(summaryHeaders, 6, 21, xfStart));
-personSummaries.forEach((p, i) => {
-  const n = i + 7;
-  const style = p.missingCount ? xfStart + 2 : (p.extraCount ? xfStart + 4 : xfStart + 5);
-  summaryRows.set(n, makeCells([p.name, p.gab, p.standardCount, p.presentCount, p.missingCount, p.extraCount, p.status, p.presentTitles, p.missingTitles, p.extraTitles], n, 21, [style, xfStart + 7, style, style, style, style, style, xfStart + 7, xfStart + 7, xfStart + 7]));
-});
-for (const [n, cells] of summaryRows) {
-  const rowIndex = table.findIndex((xml) => xml.startsWith(`<row r="${n}"`));
-  if (rowIndex >= 0) table[rowIndex] = table[rowIndex].replace('</row>', `${cells}</row>`);
-  else table.push(`<row r="${n}" ht="64" customHeight="1">${cells}</row>`);
-}
-table.sort((a, b) => Number(a.match(/<row r="(\d+)"/)?.[1]) - Number(b.match(/<row r="(\d+)"/)?.[1]));
 const lastDetail = output.length + 6;
-const last = Math.max(lastDetail, personSummaries.length + 6);
-const widths = [7, 27, 48, 28, 47, 24, 18, 16, 16, 58, 58, 50, 50, 70, 70, 66, 11, 13, 13, 3, 28, 47, 12, 14, 12, 14, 34, 72, 72, 72];
-const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:AD${last}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="6" topLeftCell="A7" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${table.join('')}</sheetData><autoFilter ref="A6:S${lastDetail}"/><mergeCells count="6"><mergeCell ref="A1:S1"/><mergeCell ref="A2:S2"/><mergeCell ref="A3:S3"/><mergeCell ref="A4:S4"/><mergeCell ref="U1:AD1"/><mergeCell ref="U2:AD2"/></mergeCells></worksheet>`;
+const last = lastDetail;
+const widths = [7, 28, 34, 44, 22, 12, 11, 13, 14, 36, 58, 58, 15, 15, 48, 48, 23, 48, 18, 11, 48, 68, 68, 56, 13, 13];
+const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:Z${last}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="4" ySplit="6" topLeftCell="E7" activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="E7" sqref="E7"/></sheetView></sheetViews><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${table.join('')}</sheetData><autoFilter ref="A6:Z${lastDetail}"/><mergeCells count="4"><mergeCell ref="A1:Z1"/><mergeCell ref="A2:Z2"/><mergeCell ref="A3:Z3"/><mergeCell ref="A4:Z4"/></mergeCells></worksheet>`;
 write(path.join(dir, 'xl/worksheets/sheet3.xml'), sheet);
 
 let wb = read(path.join(dir, 'xl/workbook.xml'));
@@ -265,4 +264,15 @@ const zip = path.join(root, 'outputs', 'compare_19_09_2026_result.zip');
 if (fs.existsSync(zip)) fs.rmSync(zip, { force: true });
 execFileSync('powershell', ['-NoProfile', '-Command', `Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::CreateFromDirectory('${dir.replace(/'/g, "''")}','${zip.replace(/'/g, "''")}')`]);
 fs.copyFileSync(zip, source);
-console.log(JSON.stringify({ source, gabRaw: gabRaw.length, gabDeduplicated: gab.length, duplicateGabRows: gabRaw.length - gab.length, standardRows: standard.length, unique200, matchedPeople, outputRows: output.length, counts }, null, 2));
+const exactProfilePeople = [...standardPeople.values()].filter((p) => gabKey(p.gab) && (gabByPerson.get(gabKey(p.gab))?.length ?? 0) > 0).length;
+const nameOnlyPeople = [...standardPeople.values()].filter((p) => !(gabKey(p.gab) && (gabByPerson.get(gabKey(p.gab))?.length ?? 0) > 0) && (gabByPerson.get(norm(p.name))?.length ?? 0) > 0).length;
+const lowConfidenceMatches = output.filter((x) => x.g && x.s?.sourceRow && x.score >= 0.62 && x.score < 0.8).length;
+const duplicateStandardKeys = standard.length - new Set(standard.map(standardCompareKey)).size;
+const standardKeyRows = new Map();
+for (const s of standard) {
+  const key = standardCompareKey(s);
+  if (!standardKeyRows.has(key)) standardKeyRows.set(key, []);
+  standardKeyRows.get(key).push(s);
+}
+const duplicateStandardGroups = [...standardKeyRows.values()].filter((rows) => rows.length > 1).map((rows) => ({ name: rows[0].name, title: rows[0].gabTitle || rows[0].recordTitle, sourceRows: rows.map((r) => r.sourceRow) }));
+console.log(JSON.stringify({ source, gabRaw: gabRaw.length, gabDeduplicated: gab.length, duplicateGabRows: gabRaw.length - gab.length, standardRows: standard.length, unique200, matchedPeople, exactProfilePeople, nameOnlyPeople, lowConfidenceMatches, duplicateStandardKeys, duplicateStandardGroups, outputRows: output.length, counts }, null, 2));
