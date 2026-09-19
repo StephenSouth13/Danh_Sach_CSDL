@@ -130,20 +130,20 @@ const output = [];
 for (const person of standardPeople.values()) {
   const profileCandidates = [...person.gabLinks].flatMap((link) => gabByPerson.get(gabKey(link)) ?? []);
   const candidates = [...new Map([...profileCandidates, ...(gabByPerson.get(norm(person.name)) ?? [])].map((x) => [x.recordId || `${x.sourceRow}`, x])).values()];
-  const used = new Set();
+  const pairs = person.rows.flatMap((s) => candidates.map((g) => ({ s, g, score: achievementScore(s, g) }))).sort((a, b) => b.score - a.score);
+  const assignments = new Map(), used = new Set();
+  for (const pair of pairs) {
+    if (assignments.has(pair.s.sourceRow) || used.has(pair.g.sourceRow)) continue;
+    assignments.set(pair.s.sourceRow, { g: pair.g, score: pair.score });
+    used.add(pair.g.sourceRow);
+  }
   for (const s of person.rows) {
-    let best = null;
-    for (const g of candidates) {
-      if (used.has(g.sourceRow)) continue;
-      const score = achievementScore(s, g);
-      if (!best || score > best.score) best = { g, score };
-    }
+    const best = assignments.get(s.sourceRow) ?? null;
     if (!best) {
       const status = candidates.length ? 'GAB THIẾU THÀNH TỰU' : 'CHƯA CÓ HỒ SƠ TRÊN GAB';
       output.push({ status, issues: candidates.length ? 'Không tìm thấy thành tựu tương ứng trong dữ liệu GAB xuất về.' : 'Không tìm thấy người theo link GAB hoặc tên chuẩn hóa.', s, g: null, profileGab: candidates[0]?.gab || '', score: best?.score ?? 0 });
       continue;
     }
-    used.add(best.g.sourceRow);
     const g = best.g, issues = [];
     if (!validUrl(s.gab) && validUrl(g.gab)) issues.push('Tab chuẩn thiếu link hồ sơ GAB nhưng đã tìm thấy theo tên');
     else if (validUrl(s.gab) && validUrl(g.gab) && gabKey(s.gab) !== gabKey(g.gab)) issues.push(`Link hồ sơ chuẩn khác gabId: chuẩn ${s.gab}, GAB ${g.gab}`);
@@ -175,20 +175,31 @@ const personSummaries = [...standardPeople.values()].map((person) => {
   const items = output.filter((x) => personKey(x.s?.name || x.g?.name, x.s?.gab || x.g?.gab) === key);
   const compared = items.filter((x) => x.s?.sourceRow);
   const present = compared.filter((x) => x.g);
-  const missing = compared.filter((x) => !x.g);
+  const standardGroups = new Map();
+  for (const x of compared) { const k = norm(x.s?.gabTitle || x.s?.recordTitle); if (!standardGroups.has(k)) standardGroups.set(k, []); standardGroups.get(k).push(x); }
+  const coveredGroups = [], missingGroups = [];
+  for (const group of standardGroups.values()) {
+    const representative = group[0];
+    const covered = present.some((x) => achievementScore(representative.s, x.g) >= 0.8);
+    (covered ? coveredGroups : missingGroups).push(representative);
+  }
+  const duplicateStandard = [...standardGroups.values()].flatMap((group) => group.slice(1));
+  const missing = missingGroups;
   const extras = items.filter((x) => x.status === statusNames[3]);
   const list = (rows, pick) => rows.map((x, i) => `${i + 1}. ${pick(x)}`).join('\n');
   return {
     name: person.name,
     gab: person.gab,
     standardCount: person.rows.length,
-    presentCount: present.length,
+    presentCount: coveredGroups.length,
     missingCount: missing.length,
+    duplicateCount: duplicateStandard.length,
     extraCount: extras.length,
     status: missing.length ? `THIẾU ${missing.length} THÀNH TỰU TRÊN GAB` : (extras.length ? `KHÔNG THIẾU THEO CHUẨN; ${extras.length} DÒNG GAB CẦN XÁC MINH` : 'ĐỦ - KHỚP'),
-    presentTitles: list(present, (x) => x.g?.title || x.s?.gabTitle || x.s?.recordTitle || ''),
+    presentTitles: list(present, (x) => `${x.g?.title || x.s?.gabTitle || x.s?.recordTitle || ''}${x.g?.recordId ? ` [recordId: ${x.g.recordId}]` : ''}`),
     missingTitles: list(missing, (x) => x.s?.gabTitle || x.s?.recordTitle || ''),
-    extraTitles: list(extras, (x) => x.g?.title || ''),
+    duplicateTitles: list(duplicateStandard, (x) => x.s?.gabTitle || x.s?.recordTitle || ''),
+    extraTitles: list(extras, (x) => `${x.g?.title || ''}${x.g?.recordId ? ` [recordId: ${x.g.recordId}]` : ''}`),
   };
 }).sort((a, b) => norm(a.name).localeCompare(norm(b.name)));
 const summaryByPerson = new Map(personSummaries.map((p) => [personKey(p.name, p.gab), p]));
@@ -237,7 +248,7 @@ table.push(makeRow([`PHẠM VI CỐ ĐỊNH THEO TAB CHUẨN: ${unique200} tên 
 table.push(makeRow([`GAB thiếu: ${counts['GAB THIẾU THÀNH TỰU']} | Chưa có hồ sơ GAB: ${counts['CHƯA CÓ HỒ SƠ TRÊN GAB']} | Sai/chưa đồng nhất: ${counts['SAI/CHƯA ĐỒNG NHẤT']} | Chỉ có trên GAB - cần xác minh: ${counts['GAB CÓ THÊM - 200 CHƯA CÓ']} | Đủ-khớp: ${counts['ĐỦ - KHỚP']}`], 3, xfStart + 1, 28));
 table.push(makeRow(['ĐÃ KIỂM TOÁN: đủ 366/366 dòng chuẩn, không mất/lặp dòng, không có recordId giả và không sai lệch trường GAB khi kéo dữ liệu. Các dòng khác link hồ sơ, khác tên/pháp danh, trùng chuẩn hoặc độ khớp thấp đều được chuyển sang trạng thái cần xác minh.'], 4, xfStart + 1, 42));
 table.push('<row r="5" ht="8" customHeight="1"></row>');
-const headers = ['HỌ TÊN KLG', 'KẾT LUẬN ĐỐI CHIẾU', 'THIẾU / SAI / CŨ', 'HƯỚNG XỬ LÝ', 'ĐỘ KHỚP', 'TỔNG TT CHUẨN', 'ĐÃ CÓ TRÊN GAB', 'THIẾU TRÊN GAB', 'GAB DƯ CẦN XÁC MINH', 'DANH SÁCH TIÊU ĐỀ GAB DƯ', 'DÒNG TAB CHUẨN', 'STD - STT', 'STD - THÔNG TIN HỒ SƠ', 'STD - SỐ XÁC LẬP KL', 'STD - NGÀY XÁC LẬP KL', 'STD - TÊN KỶ LỤC', 'STD - LINK HỒ SƠ GAB', 'STD - HỌ VÀ TÊN', 'STD - NĂM SINH', 'STD - TỈNH THÀNH', 'STD - HÌNH ĐẠI DIỆN', 'STD - LOẠI KỶ LỤC GIA', 'STD - DANH VỊ KHÁC', 'STD - THỜI GIAN XÁC LẬP GAB', 'STD - TIÊU ĐỀ THÀNH TỰU GAB', 'STD - LINK BÀI VIẾT', 'STD - MÔ TẢ / GIÁ TRỊ', 'STD - HÌNH ẢNH BÀI VIẾT', 'STD - LINK YOUTUBE', 'STD - LINK TIKTOK/FACEBOOK', 'STD - THÀNH TỰU XÁC THỰC', 'GAB - recordId', 'GAB - gabId', 'GAB - fullName', 'GAB - time', 'GAB - title', 'GAB - url', 'GAB - description', 'DÒNG TAB GAB'];
+const headers = ['HỌ TÊN KLG', 'KẾT LUẬN ĐỐI CHIẾU', 'THIẾU / SAI / CŨ', 'HƯỚNG XỬ LÝ', 'ĐỘ KHỚP', 'TỔNG DÒNG CHUẨN', 'ĐÃ CÓ TRÊN GAB', 'THIẾU THẬT TRÊN GAB', 'GAB DƯ CẦN XÁC MINH', 'CỤ THỂ ĐÃ CÓ TRÊN GAB', 'CỤ THỂ CÒN THIẾU THẬT', 'CỤ THỂ GAB CÓ THÊM', 'TRÙNG TRONG TAB CHUẨN', 'CỤ THỂ DÒNG CHUẨN BỊ TRÙNG', 'DÒNG TAB CHUẨN', 'STD - STT', 'STD - THÔNG TIN HỒ SƠ', 'STD - SỐ XÁC LẬP KL', 'STD - NGÀY XÁC LẬP KL', 'STD - TÊN KỶ LỤC', 'STD - LINK HỒ SƠ GAB', 'STD - HỌ VÀ TÊN', 'STD - NĂM SINH', 'STD - TỈNH THÀNH', 'STD - HÌNH ĐẠI DIỆN', 'STD - LOẠI KỶ LỤC GIA', 'STD - DANH VỊ KHÁC', 'STD - THỜI GIAN XÁC LẬP GAB', 'STD - TIÊU ĐỀ THÀNH TỰU GAB', 'STD - LINK BÀI VIẾT', 'STD - MÔ TẢ / GIÁ TRỊ', 'STD - HÌNH ẢNH BÀI VIẾT', 'STD - LINK YOUTUBE', 'STD - LINK TIKTOK/FACEBOOK', 'STD - THÀNH TỰU XÁC THỰC', 'GAB - recordId', 'GAB - gabId', 'GAB - fullName', 'GAB - time', 'GAB - title', 'GAB - url', 'GAB - description', 'DÒNG TAB GAB'];
 table.push(makeRow(headers, 6, xfStart, 58));
 const statusStyle = {
   'GAB THIẾU THÀNH TỰU': xfStart + 2,
@@ -264,13 +275,13 @@ detailOutput.forEach((r, i) => {
       : (r.g ? 'Kiểm tra các trường đang lệch; dòng đủ-khớp không cần xử lý.' : 'Kiểm tra lại link, thời gian và nội dung rồi bổ sung thành tựu chuẩn vào GAB.')));
   const noRecord = !g.recordId;
   const gabProfile = g.gab || r.profileGab || (validUrl(s.gab) ? s.gab : 'KHÔNG TÌM THẤY HỒ SƠ GAB');
-  const vals = [s.name || g.name || '', displayStatus, displayIssues, action, r.score ? `${Math.round(r.score * 100)}%` : 'KHÔNG GHÉP', summary?.standardCount ?? '', summary?.presentCount ?? '', summary?.missingCount ?? '', summary?.extraCount ?? '', summary?.extraTitles || 'KHÔNG CÓ', s.sourceRow || '', s.stt || '', s.profile || '', s.cert || '', s.officialDate || '', s.recordTitle || '', s.gab || 'CHƯA CÓ LINK HỒ SƠ TRONG TAB CHUẨN', s.name || '', s.birth || 'CHƯA CÓ', s.province || 'CHƯA CÓ', s.avatar || 'CHƯA CÓ', s.recordType || 'CHƯA PHÂN LOẠI', s.otherTitle || 'KHÔNG CÓ', s.gabTime || 'CHƯA CÓ', s.gabTitle || 'CHƯA CÓ', s.article || 'CHƯA CÓ', s.description || 'CHƯA CÓ', s.image || 'CHƯA CÓ', s.youtube || 'CHƯA CÓ', s.social || 'CHƯA CÓ', s.verified || 'CHƯA CÓ', g.recordId || 'KHÔNG CÓ RECORD TƯƠNG ỨNG', gabProfile, g.name || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU TÊN'), g.time || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU THỜI GIAN'), g.title || 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG', g.url || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU LINK BÀI'), g.description || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU MÔ TẢ'), g.sourceRow || 'KHÔNG CÓ'];
+  const vals = [s.name || g.name || '', displayStatus, displayIssues, action, r.score ? `${Math.round(r.score * 100)}%` : 'KHÔNG GHÉP', summary?.standardCount ?? '', summary?.presentCount ?? '', summary?.missingCount ?? '', summary?.extraCount ?? '', summary?.presentTitles || 'KHÔNG CÓ', summary?.missingTitles || 'KHÔNG CÓ', summary?.extraTitles || 'KHÔNG CÓ', summary?.duplicateCount ?? 0, summary?.duplicateTitles || 'KHÔNG CÓ', s.sourceRow || '', s.stt || '', s.profile || '', s.cert || '', s.officialDate || '', s.recordTitle || '', s.gab || 'CHƯA CÓ LINK HỒ SƠ TRONG TAB CHUẨN', s.name || '', s.birth || 'CHƯA CÓ', s.province || 'CHƯA CÓ', s.avatar || 'CHƯA CÓ', s.recordType || 'CHƯA PHÂN LOẠI', s.otherTitle || 'KHÔNG CÓ', s.gabTime || 'CHƯA CÓ', s.gabTitle || 'CHƯA CÓ', s.article || 'CHƯA CÓ', s.description || 'CHƯA CÓ', s.image || 'CHƯA CÓ', s.youtube || 'CHƯA CÓ', s.social || 'CHƯA CÓ', s.verified || 'CHƯA CÓ', g.recordId || 'KHÔNG CÓ RECORD TƯƠNG ỨNG', gabProfile, g.name || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU TÊN'), g.time || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU THỜI GIAN'), g.title || 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG', g.url || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU LINK BÀI'), g.description || (noRecord ? 'KHÔNG CÓ THÀNH TỰU TƯƠNG ỨNG' : 'GAB THIẾU MÔ TẢ'), g.sourceRow || 'KHÔNG CÓ'];
   const base = statusStyle[r.status] ?? xfStart + 7;
-  table.push(makeRow(vals, i + 7, vals.map((_, c) => c >= 1 && c <= 3 ? base : (c >= 11 && c <= 30 ? xfStart + 6 : (c >= 31 ? xfStart + 4 : xfStart + 7))), 64));
+  table.push(makeRow(vals, i + 7, vals.map((_, c) => c >= 1 && c <= 3 ? base : (c >= 15 && c <= 34 ? xfStart + 6 : (c >= 35 ? xfStart + 4 : xfStart + 7))), 76));
 });
 const lastDetail = detailOutput.length + 6;
 const last = lastDetail;
-const widths = [28,34,48,50,11,13,14,14,17,65,14,10,20,18,16,58,47,28,12,20,35,23,24,18,58,48,68,45,45,45,56,23,47,28,15,58,48,68,13];
+const widths = [28,34,48,50,11,13,14,16,17,72,72,72,16,72,14,10,20,18,16,58,47,28,12,20,35,23,24,18,58,48,68,45,45,45,56,23,47,28,15,58,48,68,13];
 const endCol = colName(headers.length);
 const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${endCol}${last}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="4" ySplit="6" topLeftCell="E7" activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="E7" sqref="E7"/></sheetView></sheetViews><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${table.join('')}</sheetData><autoFilter ref="A6:${endCol}${lastDetail}"/><mergeCells count="4"><mergeCell ref="A1:${endCol}1"/><mergeCell ref="A2:${endCol}2"/><mergeCell ref="A3:${endCol}3"/><mergeCell ref="A4:${endCol}4"/></mergeCells></worksheet>`;
 write(path.join(dir, 'xl/worksheets/sheet3.xml'), sheet);
