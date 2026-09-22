@@ -17,6 +17,31 @@ const wb = XLSX.readFile(file, { raw: false });
 const target = XLSX.utils.sheet_to_json(wb.Sheets.sheet6, { header: 1, defval: '' });
 const standard = XLSX.utils.sheet_to_json(wb.Sheets['Danh sách 200 người đã chuẩn'], { header: 1, defval: '' }).slice(2);
 const gab = XLSX.utils.sheet_to_json(wb.Sheets['DANH SÁCH ĐẦY ĐỦ TRÊN GAB'], { header: 1, defval: '' }).slice(1);
+const sourceMatchPath = path.join(root, 'outputs', 'sheet6_source_matches.json');
+const sourceMatches = fs.existsSync(sourceMatchPath) ? JSON.parse(fs.readFileSync(sourceMatchPath, 'utf8')).results : [];
+const sourceMatchMap = new Map(sourceMatches.map(item => [`${item.name}||${item.title}`, item]));
+const manualLinks = new Map([
+  ['CHU MẠNH NGUYÊN', 'https://kyluc.vn/tin-tuc/ky-luc/nha-giao-chu-manh-nguyen-la-nguoi-cao-tuoi-nhat-nhan-bang-tien-si-khoa-hoc-giao-duc-tai-viet-nam'],
+  ['ĐẶNG ĐỨC THÀNH', 'https://kyluc.vn/tin-tuc/ky-luc/bai-tap-vuot-qua-noi-so-ncov-cua-ceo-dang-duc-thanh-xac-lap-ky-luc-viet-nam'],
+  ['ĐỒNG XUÂN TRƯỜNG', 'https://kyluc.vn/tin-tuc/ky-luc-viet-nam/doc-dao-vuon-linh-sam-bonsai-da-dang-the-xac-lap-ky-luc-viet-nam'],
+  ['HOÀNG THỊ NGỌC MAI', 'https://kyluc.vn/tin-tuc/ky-luc/tap-tho-me-oi-con-nho-me-cua-nha-giao-hoang-thi-ngoc-mai-chinh-thuc-xac-lap-ky-luc-viet-nam-trong-ngay-ra-mat'],
+  ['HUỲNH THỊ HOA', 'https://kyluc.vn/tin-tuc/thong-tin/vietkings-discovery-i-ghe-tham-bao-tang-da-ngoc-chau-tai-thanh-pho-bao-loc'],
+  ['LƯƠNG VĂN QUANG', 'https://kyluc.vn/tin-tuc/su-kien-ky-luc/hoi-ngo-ky-luc-gia-viet-nam-lan-thu-51-tai-thai-nguyen-dau-an-phat-trien-cua-cong-dong-ky-luc-gia-viet-nam-sau-18-nam'],
+  ['ĐINH VĂN TRỌNG', 'https://topplus.vn/tin-tuc/top-su-kien/ve-kien-giang-chiem-nguong-co-xu-ky-my-cay-mai-vang-kieng-co-xu-chay-toan-than-dang-truc-mot-cot-vua-duoc-xac-lap-gia-tri-ky-luc-doc-ban-viet-nam'],
+  ['LÊ TRỌNG HUY', 'https://baolaocai.vn/cau-be-lop-3-lap-ky-luc-kinh-ngac-voi-quyen-con-nhi-khuc-post484185.html']
+]);
+const manualDescriptions = new Map([
+  ['CHU MẠNH NGUYÊN', 'Nhà giáo Chu Mạnh Nguyên sinh năm 1944, được cấp bằng Tiến sĩ Khoa học Giáo dục năm 2015 ở tuổi 71. Ngày 01/02/2020, VietKings trao Kỷ lục Việt Nam cho ông với nội dung người cao tuổi nhất được nhận bằng Tiến sĩ Khoa học Giáo dục tại Việt Nam. Thành tựu lan tỏa tinh thần học tập suốt đời và khẳng định giá trị của sự kiên trì trong nghiên cứu, giáo dục.'],
+  ['ĐẶNG ĐỨC THÀNH', 'Bài tập “Vượt qua Nỗi sợ nCoV” gồm 7 động tác đơn giản, được phổ biến qua cuộc thi video trên toàn quốc. Tại thời điểm xác lập có hơn 4.000 clip gửi về, sau đó tăng lên hơn 5.300 bài từ 63 tỉnh, thành. Kỷ lục được xác lập ngày 22/03/2022, góp phần khuyến khích rèn luyện sức khỏe và nâng cao sức đề kháng trong giai đoạn dịch bệnh.'],
+  ['ĐỒNG XUÂN TRƯỜNG', 'Ông Đồng Xuân Trường cùng nghệ nhân Trương Văn Hoàng nghiên cứu và phát triển khoảng 2.000 cây Linh sam bonsai với nhiều dáng thế sau gần 10 năm thử nghiệm. Bộ sưu tập được VietKings ghi nhận có số lượng Bonsai Linh sam đa dáng thế nhiều nhất, góp phần phát triển nghệ thuật bonsai và tạo hướng đi mới cho cây kiểng Việt Nam.'],
+  ['HOÀNG THỊ NGỌC MAI', 'Tập thơ “Mẹ ơi! Con nhớ Mẹ” gồm 30 bài thơ; 60 bức tranh thư pháp được chuyển thể từ các câu thơ, bài thơ với hình ảnh hoa mai làm chủ đạo. Kỷ lục được trao ngày 12/10/2025, tôn vinh tình mẫu tử, nghệ thuật thư pháp và giá trị gắn kết gia đình Việt.'],
+  ['HUỲNH THỊ HOA', 'Bộ tượng Thập Bát La Hán được điêu khắc từ gỗ dâu tằm cổ thụ, trưng bày tại Bảo tàng đá Ngọc Châu thuộc Khu du lịch sinh thái Hoa Tài Ngọc Châu, Bảo Lộc. Công trình được công nhận Kỷ lục Việt Nam năm 2018, thể hiện kỹ thuật điêu khắc gỗ quy mô lớn và góp phần bảo tồn, giới thiệu nghệ thuật tạo tác truyền thống.']
+]);
+const manualDescriptionsByKey = new Map([
+  ['ĐINH VĂN TRỌNG', 'Cây mai vàng “Cổ Xù Kỳ Mỹ” thuộc giống mai xù, có tuổi thọ khoảng 100 năm, nổi bật với thân cổ xù chảy toàn thân và dáng trực một cốt. Ngày 29/09/2024 tại Rạch Giá, Kiên Giang, VietKings xác lập giá trị Kỷ lục Độc bản Việt Nam cho tác phẩm. Việc ghi nhận góp phần tôn vinh nghệ thuật mai kiểng cổ Nam Bộ và khuyến khích bảo tồn các giống cây cảnh có giá trị lâu năm.'],
+  ['LÊ TRỌNG HUY', 'Lê Trọng Huy được VietKings ghi nhận là cậu bé nhỏ tuổi nhất biểu diễn thành công 6 thử thách với quyền côn nhị khúc tại chương trình Siêu tài năng nhí năm 2020. Thành tích thể hiện quá trình luyện tập kỹ thuật, khả năng kiểm soát côn và bản lĩnh biểu diễn ở độ tuổi nhỏ, góp phần lan tỏa tinh thần rèn luyện võ thuật trong thanh thiếu nhi.'],
+  ['TRÚC PHƯƠNG', 'Trường ca sử thi “Mẹ, Đất nước và Lưu dân” tái hiện các cuộc chiến tranh cùng lịch sử mở cõi về phương Nam của người Việt bằng hình thức trường ca có quy mô lớn. Tác phẩm kết hợp giá trị văn học với tư liệu lịch sử, góp phần lưu giữ ký ức cộng đồng, tôn vinh hành trình dựng nước, giữ nước và quá trình hình thành vùng đất phương Nam.']
+]);
 
 const norm = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const tokens = value => new Set(norm(value).split(/\s+/).filter(token => token.length > 2));
@@ -30,6 +55,18 @@ const score = (left, right) => {
 const valid = (value, fallback = 'CHƯA CÓ') => {
   const text = String(value ?? '').trim();
   return text && !/^(CHƯA CÓ|KHÔNG CÓ)$/i.test(text) ? text : fallback;
+};
+const validArticle = value => {
+  const text = String(value ?? '').trim();
+  return /^https?:\/\//i.test(text) ? text : '';
+};
+const recordTypeLabel = value => {
+  const text = String(value || '').toUpperCase();
+  if (text.includes('THẾ GIỚI')) return 'Kỷ lục Thế giới';
+  if (text.includes('CHÂU Á')) return 'Kỷ lục Châu Á';
+  if (text.includes('ĐÔNG DƯƠNG')) return 'Kỷ lục Đông Dương';
+  if (text.includes('TOP')) return 'Top Việt Nam';
+  return 'Kỷ lục Việt Nam';
 };
 const standardByName = new Map();
 for (const row of standard) {
@@ -53,6 +90,10 @@ for (let index = 4; index < target.length; index++) {
   const name = String(row[0] || '').trim();
   const achievement = String(row[5] || '').trim();
   if (!name || !achievement) continue;
+  if (/^Không có thành tựu thiếu$/i.test(achievement)) {
+    updates.set(index + 1, Object.fromEntries('ABCDEFGHIJKLMN'.split('').map(column => [column, ''])));
+    continue;
+  }
   const candidates = standardByName.get(norm(name)) || [];
   const ranked = candidates.map(candidate => ({ candidate, value: Math.max(score(achievement, candidate[13]), score(achievement, candidate[4])) })).sort((a, b) => b.value - a.value);
   const std = ranked[0]?.candidate || [];
@@ -67,17 +108,28 @@ for (let index = 4; index < target.length; index++) {
   const gabMatch = gabRanked[0] && gabRanked[0].value >= 0.78 ? gabRanked[0].candidate : null;
   const recordId = gabMatch ? valid(gabMatch[0], 'KHÔNG CÓ') : 'KHÔNG CÓ';
   if (gabMatch) matchedRecordIds++;
-  if (!gabId) { gabId = 'KHÔNG TÌM THẤY HỒ SƠ GAB'; unresolvedGabIds++; }
+  if (!gabId) { gabId = 'CHƯA CÓ HỒ SƠ GAB TRONG CÁC NGUỒN ĐÃ KIỂM TRA'; unresolvedGabIds++; }
 
+  const rawStandardTitle = valid(std[13], '');
+  const titleIsBroken = !rawStandardTitle || /^(chưa có tên|xác lập kỷ lục việt nam\s*["“”]*)$/i.test(rawStandardTitle);
+  const recordName = valid(std[4], achievement);
+  const desiredTitle = titleIsBroken ? `Xác lập ${recordTypeLabel(std[10])} “${recordName}”` : rawStandardTitle;
+  const sourceMatch = sourceMatchMap.get(`${name}||${achievement}`);
+  const standardLink = validArticle(std[14]);
+  const standardDescription = valid(std[15], '');
+  const articleLink = standardLink || (gabMatch ? valid(gabMatch[5], '') : '') || manualLinks.get(name) || (sourceMatch?.score >= .65 ? sourceMatch.link : '') || 'CHƯA TÌM THẤY BÀI VIẾT PHÙ HỢP';
+  const researchedDescription = standardDescription || (gabMatch ? valid(gabMatch[6], '') : '') || manualDescriptions.get(name) || (sourceMatch?.score >= .65 ? sourceMatch.desc : '');
+  const description = manualDescriptionsByKey.get(name) || researchedDescription || `Theo hồ sơ chuẩn, thành tựu được ghi nhận với nội dung: ${desiredTitle}. Thời gian xác lập: ${valid(std[12])}. Hồ sơ hiện chưa có đủ thông số kỹ thuật chi tiết; cần bổ sung từ quyết định xác lập hoặc bài viết chính thức để tránh suy diễn dữ liệu.`;
   const update = {
+    F: desiredTitle,
     G: recordId,
     H: gabId,
     I: valid(std[8]),
     J: valid(std[10]),
     K: valid(std[12]),
-    L: valid(std[13], achievement),
-    M: valid(std[14]),
-    N: valid(std[15])
+    L: desiredTitle,
+    M: articleLink,
+    N: description
   };
   if (gabMatch) {
     update.B = `Chuẩn ${Number(row[2] || 1)} | GAB đã có ${Math.max(Number(row[3] || 0), 1)} | Thiếu ${Math.max(Number(row[4] || 1) - 1, 0)} | Cần chuẩn hóa dữ liệu`;
