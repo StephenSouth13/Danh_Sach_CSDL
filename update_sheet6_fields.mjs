@@ -17,6 +17,12 @@ const wb = XLSX.readFile(file, { raw: false });
 const target = XLSX.utils.sheet_to_json(wb.Sheets.sheet6, { header: 1, defval: '' });
 const standard = XLSX.utils.sheet_to_json(wb.Sheets['Danh sách 200 người đã chuẩn'], { header: 1, defval: '' }).slice(2);
 const gab = XLSX.utils.sheet_to_json(wb.Sheets['DANH SÁCH ĐẦY ĐỦ TRÊN GAB'], { header: 1, defval: '' }).slice(1);
+const comparison = XLSX.utils.sheet_to_json(wb.Sheets['ĐỐI CHIẾU GAB - 200'], { header: 1, defval: '' }).slice(6);
+const duplicateByName = new Map();
+for (const row of comparison) {
+  const name = String(row[0] || '').trim();
+  if (name && !duplicateByName.has(name)) duplicateByName.set(name, Number(row[12] || 0));
+}
 const sourceMatchPath = path.join(root, 'outputs', 'sheet6_source_matches.json');
 const sourceMatches = fs.existsSync(sourceMatchPath) ? JSON.parse(fs.readFileSync(sourceMatchPath, 'utf8')).results : [];
 const sourceMatchMap = new Map(sourceMatches.map(item => [`${item.name}||${item.title}`, item]));
@@ -42,6 +48,20 @@ const manualDescriptionsByKey = new Map([
   ['LÊ TRỌNG HUY', 'Lê Trọng Huy được VietKings ghi nhận là cậu bé nhỏ tuổi nhất biểu diễn thành công 6 thử thách với quyền côn nhị khúc tại chương trình Siêu tài năng nhí năm 2020. Thành tích thể hiện quá trình luyện tập kỹ thuật, khả năng kiểm soát côn và bản lĩnh biểu diễn ở độ tuổi nhỏ, góp phần lan tỏa tinh thần rèn luyện võ thuật trong thanh thiếu nhi.'],
   ['TRÚC PHƯƠNG', 'Trường ca sử thi “Mẹ, Đất nước và Lưu dân” tái hiện các cuộc chiến tranh cùng lịch sử mở cõi về phương Nam của người Việt bằng hình thức trường ca có quy mô lớn. Tác phẩm kết hợp giá trị văn học với tư liệu lịch sử, góp phần lưu giữ ký ức cộng đồng, tôn vinh hành trình dựng nước, giữ nước và quá trình hình thành vùng đất phương Nam.']
 ]);
+const manualLinkRules = [
+  ['NGUYỄN ĐÌNH TRANH', '', 'https://kyluc.vn/tin-tuc/ky-luc/vietkings-values-nguoi-sang-tac-tho-ve-cac-loai-hoa-nhieu-nhat-viet-nam'],
+  ['NGUYỄN ĐỨC HIỀN', 'PHỦ TIÊN HƯƠNG', 'https://kyluc.vn/tin-tuc/ky-luc/phu-tien-huong-phu-tho-mau-tai-huyen-quoc-oai-tp-ha-noi-tro-thanh-diem-den-tam-linh-dat-ky-luc-viet-nam'],
+  ['NGUYỄN ĐỨC HIỀN', 'English Olympics', 'https://kyluc.vn/tin-tuc/thong-tin/cuoc-thi-english-olympics-of-vietnam-2019-vong-so-tuyen-offline-chinh-thuc-bat-dau'],
+  ['NGUYỄN ĐỨC LONG', '', 'https://kyluc.vn/tin-tuc/danh-muc-de-xuat/dao-dien-thuc-hien-mo-hinh-cot-moc-chu-quyen-hoang-sa-va-truong-sa-cua-viet-nam'],
+  ['NGUYỄN THẾ VINH', '', 'https://kyluc.vn/tin-tuc/ky-luc-viet-nam/chiem-nguong-bo-suu-tap-dien-thoai-phien-ban-dac-biet-va-gioi-han-dat-ky-luc-vn-cua-anh-nguyen-the-vinh'],
+  ['NGUYỄN THỊ THANH TÂM', 'Châu Á', 'https://kyluc.vn/tin-tuc/ky-luc-chau-a/hoi-ngo-ky-luc-gia-viet-nam-lan-thu-52-du-nang-hoa-se-no-du-tam-nhin-thay-co-hoi-03-ky-luc-gia-don-nhan-ky-luc-chau-a-moi'],
+  ['NGUYỄN THỊ THANH TÂM', '', 'https://kyluc.vn/tin-tuc/van-hoa-nghe-thuat/nha-suu-tap-nguyen-thi-thanh-tam-xac-lap-ky-luc-viet-nam-voi-bo-suu-tap-sen-trong-doi-song-van-hoa-viet'],
+  ['PHẠM PHƯƠNG PHI', '', 'https://kyluc.vn/tin-tuc/thong-tin/dau-dua-dr-phi-giai-phap-tu-nhien-vi-suc-khoe-cong-dong'],
+  ['PHẠM LÊ QUỐC CƯỜNG', '', 'https://quangducxua.com/dong-thoi-gian/'],
+  ['PHÙNG TUẤN GIANG', 'Củ sâm', 'https://kyluc.vn/tin-tuc/ky-luc/worldkings-ky-luc-the-gioi-cua-viet-nam-cu-sam-ngoc-linh-viet-nam-lon-nhat-the-gioi'],
+  ['PHÙNG TUẤN GIANG', 'Nam y', 'https://kyluc.vn/tin-tuc/ky-luc-the-gioi/tien-si-luong-y-ky-luc-gia-phung-tuan-giang-don-nhan-dia-vang-cong-hien-tu-vien-ky-luc-the-gioi']
+];
+const findManualLink = (name, title) => manualLinkRules.find(([ruleName, contains]) => ruleName === name && (!contains || title.includes(contains)))?.[2] || '';
 
 const norm = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const tokens = value => new Set(norm(value).split(/\s+/).filter(token => token.length > 2));
@@ -95,6 +115,8 @@ for (let index = 4; index < target.length; index++) {
     continue;
   }
   const candidates = standardByName.get(norm(name)) || [];
+  const duplicateCount = duplicateByName.get(name) || 0;
+  const uniqueStandardCount = Math.max(Number(row[2] || 0) - duplicateCount, 0);
   const ranked = candidates.map(candidate => ({ candidate, value: Math.max(score(achievement, candidate[13]), score(achievement, candidate[4])) })).sort((a, b) => b.value - a.value);
   const std = ranked[0]?.candidate || [];
   if (!ranked.length || ranked[0].value < 0.45) weakStandardMatches++;
@@ -117,10 +139,17 @@ for (let index = 4; index < target.length; index++) {
   const sourceMatch = sourceMatchMap.get(`${name}||${achievement}`);
   const standardLink = validArticle(std[14]);
   const standardDescription = valid(std[15], '');
-  const articleLink = standardLink || (gabMatch ? valid(gabMatch[5], '') : '') || manualLinks.get(name) || (sourceMatch?.score >= .65 ? sourceMatch.link : '') || 'CHƯA TÌM THẤY BÀI VIẾT PHÙ HỢP';
+  const articleLink = standardLink || (gabMatch ? validArticle(gabMatch[5]) : '') || findManualLink(name, desiredTitle) || manualLinks.get(name) || (sourceMatch?.score >= .65 ? sourceMatch.link : '') || 'CHƯA TÌM THẤY BÀI VIẾT PHÙ HỢP';
   const researchedDescription = standardDescription || (gabMatch ? valid(gabMatch[6], '') : '') || manualDescriptions.get(name) || (sourceMatch?.score >= .65 ? sourceMatch.desc : '');
-  const description = manualDescriptionsByKey.get(name) || researchedDescription || `Theo hồ sơ chuẩn, thành tựu được ghi nhận với nội dung: ${desiredTitle}. Thời gian xác lập: ${valid(std[12])}. Hồ sơ hiện chưa có đủ thông số kỹ thuật chi tiết; cần bổ sung từ quyết định xác lập hoặc bài viết chính thức để tránh suy diễn dữ liệu.`;
+  let ruleDescription = '';
+  if (name === 'NGUYỄN ĐỨC LONG') ruleDescription = 'Hai mô hình cột mốc chủ quyền Hoàng Sa và Trường Sa có cùng kích thước: cao 3 m, cạnh đáy rộng 0,8 m; được tạo hình bằng thép inox 304, đồng và các phụ kiện khác. Công trình thể hiện tình yêu quê hương, khẳng định ý thức về chủ quyền biển đảo và có giá trị tuyên truyền, giáo dục cộng đồng.';
+  if (name === 'NGUYỄN THỊ THANH TÂM') ruleDescription = 'Bộ sưu tập “Sen trong đời sống văn hóa Việt” được hình thành trong hơn 20 năm và ở thời điểm xác lập Kỷ lục Châu Á gồm 433 hiện vật: 258 ảnh và tranh sen trên nhiều chất liệu, 106 lọ hoa, đồ dùng và đồ trang trí, cùng 69 tác phẩm thư pháp và câu đối về sen. Thành tựu góp phần quảng bá biểu tượng sen và các giá trị văn hóa Việt Nam.';
+  if (name === 'NGUYỄN THẾ VINH') ruleDescription = 'Bộ sưu tập gồm các mẫu điện thoại phiên bản đặc biệt và giới hạn của nhiều thương hiệu, được VietKings trao Kỷ lục Việt Nam ngày 21/09/2025. Bộ sưu tập lưu giữ những sản phẩm gắn với lịch sử thiết kế và phát triển công nghệ, thể hiện sự kiên trì sưu tầm và trân trọng giá trị của các thiết bị qua từng thời kỳ.';
+  if (name === 'PHẠM LÊ QUỐC CƯỜNG') ruleDescription = 'Bộ sưu tập gốm Quảng Đức xưa được lưu giữ tại không gian nhà cổ của gia đình ông Phạm Lê Quốc Cường ở Phú Yên, gồm nhiều sản phẩm dân dụng và mỹ thuật đặc trưng của làng gốm như bình, lọ, chum, chóe, nậm rượu, bình vôi và chậu. Việc sưu tầm, trưng bày góp phần bảo tồn dấu tích làng nghề, giới thiệu kỹ thuật men và hoa văn đặc sắc, đồng thời lan tỏa giá trị văn hóa của dòng gốm Quảng Đức đến cộng đồng.';
+  if (name === 'PHÙNG TUẤN GIANG' && desiredTitle.includes('Củ sâm')) ruleDescription = 'Củ sâm Ngọc Linh thuộc sở hữu của lương y Phùng Tuấn Giang có chiều dài khoảng 80 cm, ngang 35 cm, nặng 2,25 kg và được giới thiệu có tuổi đời khoảng 156 năm. Thành tựu được ghi nhận ở cấp thế giới, góp phần quảng bá giá trị dược liệu đặc hữu của Việt Nam và nâng cao nhận thức về bảo tồn nguồn sâm Ngọc Linh.';
+  const description = ruleDescription || manualDescriptionsByKey.get(name) || researchedDescription || `Theo hồ sơ chuẩn, thành tựu được ghi nhận với nội dung: ${desiredTitle}. Thời gian xác lập: ${valid(std[12])}. Hồ sơ hiện chưa có đủ thông số kỹ thuật chi tiết; cần bổ sung từ quyết định xác lập hoặc bài viết chính thức để tránh suy diễn dữ liệu.`;
   const update = {
+    B: `Chuẩn ${Number(row[2] || 0)} dòng | ${uniqueStandardCount} thành tựu không trùng | GAB đã có ${Number(row[3] || 0)} | Thiếu thật ${Number(row[4] || 0)} | Trùng chuẩn ${duplicateCount}`,
     F: desiredTitle,
     G: recordId,
     H: gabId,
@@ -132,7 +161,7 @@ for (let index = 4; index < target.length; index++) {
     N: description
   };
   if (gabMatch) {
-    update.B = `Chuẩn ${Number(row[2] || 1)} | GAB đã có ${Math.max(Number(row[3] || 0), 1)} | Thiếu ${Math.max(Number(row[4] || 1) - 1, 0)} | Cần chuẩn hóa dữ liệu`;
+    update.B = `Chuẩn ${Number(row[2] || 1)} dòng | ${uniqueStandardCount} thành tựu không trùng | GAB đã có ${Math.max(Number(row[3] || 0), 1)} | Thiếu thật ${Math.max(Number(row[4] || 1) - 1, 0)} | Trùng chuẩn ${duplicateCount} | Cần chuẩn hóa dữ liệu`;
     update.D = Math.max(Number(row[3] || 0), 1);
     update.E = Math.max(Number(row[4] || 1) - 1, 0);
   }
@@ -158,7 +187,7 @@ const replaceCell = (rowXml, ref, value, style) => {
   if (regex.test(rowXml)) return rowXml.replace(regex, cell);
   return rowXml.replace('</row>', `${cell}</row>`);
 };
-const headers = { I: 'TỈNH THÀNH MỚI', J: 'LOẠI KỶ LỤC', K: 'THỜI GIAN XÁC LẬP', L: 'TIÊU ĐỀ THÀNH TỰU TRÊN GAB', M: 'LINK BÀI VIẾT TRÊN GAB', N: 'THÔNG SỐ KỸ THUẬT + THỜI GIAN + Ý NGHĨA/GIÁ TRỊ/ẢNH HƯỞNG TÍCH CỰC' };
+const headers = { C: 'TỔNG DÒNG CHUẨN', I: 'TỈNH THÀNH MỚI', J: 'LOẠI KỶ LỤC', K: 'THỜI GIAN XÁC LẬP', L: 'TIÊU ĐỀ THÀNH TỰU TRÊN GAB', M: 'LINK BÀI VIẾT TRÊN GAB', N: 'THÔNG SỐ KỸ THUẬT + THỜI GIAN + Ý NGHĨA/GIÁ TRỊ/ẢNH HƯỞNG TÍCH CỰC' };
 xml = xml.replace(/<row\b([^>]*)\br="4"([^>]*)>[\s\S]*?<\/row>/, rowBlock => {
   const style = getStyle(rowBlock, ['H4', 'G4', 'F4']);
   for (const [column, value] of Object.entries(headers)) rowBlock = replaceCell(rowBlock, `${column}4`, value, style);
